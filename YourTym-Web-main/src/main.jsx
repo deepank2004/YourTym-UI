@@ -72,9 +72,9 @@ useEffect(() => {
 
   // Route to appropriate page based on path
   const page =
-    path === '/women-services' ? (
+    path.startsWith('/women-services') ? (
       <ServicesPage gender="Women" services={womenServices} {...pageProps} />
-    ) : path === '/men-services' ? (
+    ) : path.startsWith('/men-services') ? (
       <ServicesPage gender="Men" services={menServices} {...pageProps} />
     ) : path === '/packages' ? (
       <PackagesPage {...pageProps} packages={packages} />

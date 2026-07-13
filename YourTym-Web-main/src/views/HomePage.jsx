@@ -6,6 +6,7 @@ import { OffersStrip, Reviews } from '../components/OffersReviews.jsx';
 import { SectionTitle, ImageTile, EntryCard } from '../components/CommonComponents.jsx';
 import { homeService, mapService, mapPackage } from '../services/api/homeService.js';
 import { images } from '../models/constants.js';
+import { userAdditionalService } from '../services/api/userAdditionalService.js';
 
 function SectionState({ state, children, empty = 'No data available.' }) {
   if (state.status === 'loading') return <p className="muted">Loading…</p>;
@@ -17,6 +18,7 @@ function SectionState({ state, children, empty = 'No data available.' }) {
 const initial = () => ({ status: 'loading', items: [], error: '' });
 export function HomePage({ go, addItem }) {
   const [data, setData] = useState({ banners: initial(), categories: initial(), services: initial(), packages: initial(), searched: initial(), recommended: initial() });
+  const [testimonials, setTestimonials] = useState([]);
 
   useEffect(() => {
     let active = true;
@@ -27,6 +29,7 @@ export function HomePage({ go, addItem }) {
     }));
     return () => { active = false; };
   }, []);
+  useEffect(() => { let active = true; userAdditionalService.testimonials().then((items) => { const list = Array.isArray(items) ? items : (items?.testimonials ?? []); if (active) setTestimonials(list); }).catch(() => {}); return () => { active = false; }; }, []);
 
   const services = data.services.items.map((item, index) => mapService(item, index));
   const recommended = data.recommended.items.map((item, index) => mapService(item, index, 'recommended'));
@@ -48,6 +51,6 @@ export function HomePage({ go, addItem }) {
     <section className="section"><SectionTitle title="Featured Packages" /><SectionState state={{ ...data.packages, items: packages }} empty="No packages available."><PackageGrid go={go} addItem={addItem} compact packages={packages} /></SectionState></section>
     <section className="section"><OffersStrip go={go} /></section>
     <section className="section entry-grid"><EntryCard title="For Women" image={images.womenSalon} go={() => go('/women-services')} /><EntryCard title="For Men" image={images.menSalon} go={() => go('/men-services')} /></section>
-    <Reviews reviews={[]} />
+    <Reviews reviews={testimonials.map((item, index) => ({ id: item?._id ?? item?.id ?? `testimonial-${index}`, author: item?.name ?? item?.user?.fullName ?? 'YourTym customer', text: item?.comment ?? item?.description ?? item?.review ?? '' }))} />
   </div>;
 }

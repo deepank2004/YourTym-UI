@@ -16,7 +16,7 @@ function getPayloadMessage(payload, fallback) {
 }
 
 export function mapProfileResponse(payload) {
-  const profile = payload?.data?.user || payload?.user || payload?.data || payload || {};
+  const profile = payload?.data?.user || payload?.data?.data?.user || payload?.user || payload?.data?.data || payload?.data || payload || {};
 
   return PROFILE_FIELDS.reduce((mapped, field) => {
     mapped[field] = profile?.[field] ?? '';
@@ -24,6 +24,13 @@ export function mapProfileResponse(payload) {
   }, {
     image: profile?.image ?? '',
   });
+}
+
+export async function updateLocation({ currentLat, currentLong, city, sector }) {
+  const body = { currentLat, currentLong, city };
+  if (sector) body.sector = sector;
+  const response = await apiClient.put(userEndpoints.profile.updateLocation, body);
+  return response.data;
 }
 
 export async function getProfile() {

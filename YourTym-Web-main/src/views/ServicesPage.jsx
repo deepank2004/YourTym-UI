@@ -16,7 +16,7 @@ function BackButton() {
 export function ServicesPage({ gender, addItem }) {
   const heroImage = gender === 'Women' ? images.womenSalon : images.menSalon;
   const [items, setItems] = useState([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('search') || '');
   const [state, setState] = useState('loading');
   const [error, setError] = useState('');
   useEffect(() => { let active = true; setState('loading'); setError(''); const timer = setTimeout(() => categoryService.listServices({ search }).then((result) => { if (active) { setItems(result); setState(result.length ? 'success' : 'empty'); } }).catch((err) => { if (active) { setError(err.message); setState('error'); } }), 250); return () => { active = false; clearTimeout(timer); }; }, [search]);

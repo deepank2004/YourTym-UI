@@ -2,32 +2,46 @@ import apiClient from './apiClient.js';
 import { userEndpoints } from './userEndpoints.js';
 
 function collection(payload, endpoint) {
-  const candidates = [payload, payload?.data, payload?.data?.data, payload?.data?.items, payload?.data?.results, payload?.items, payload?.results];
+  const candidates = [payload, payload?.data, payload?.data?.data, payload?.data?.data?.data, payload?.data?.items, payload?.data?.data?.items, payload?.data?.results, payload?.items, payload?.results];
   const items = candidates.find(Array.isArray);
   if (!items) throw new Error(`Unexpected response shape from ${endpoint}`);
   return items;
 }
 
 function idOf(item, index, prefix) {
-  return String(item?._id ?? item?.id ?? item?.serviceId ?? item?.categoryId ?? item?.packageId ?? item?.bannerId ?? `${prefix}-${item?.name ?? item?.title ?? index}`);
+  return String(item?._id ?? item?.id ?? item?.serviceId ?? item?.serviceTypeId ?? item?.service?._id ?? item?.Service?._id ?? item?.categoryId ?? item?.packageId ?? item?.bannerId ?? `${prefix}-${item?.name ?? item?.title ?? index}`);
 }
 
-function imageOf(item) { return item?.image ?? item?.imageUrl ?? item?.bannerImage ?? item?.thumbnail ?? item?.media?.url ?? ''; }
+function imageOf(item) { return item?.image ?? item?.imageUrl ?? item?.bannerImage ?? item?.thumbnail ?? item?.media?.url ?? item?.images?.[0]?.img ?? ''; }
 
 export function mapService(item, index, prefix = 'service') {
-  return { id: idOf(item, index, prefix), name: item?.name ?? item?.serviceName ?? item?.title ?? 'Service', description: item?.description ?? '', duration: Number(item?.duration ?? item?.serviceDuration ?? item?.timeInMin ?? 0), original: Number(item?.originalPrice ?? item?.mrp ?? item?.price ?? 0), price: Number(item?.discountPrice ?? item?.sellingPrice ?? item?.discountedPrice ?? item?.amount ?? item?.price ?? 0), brand: item?.brand ?? item?.brands ?? '', image: imageOf(item) };
+  const source = item?.service ?? item?.Service ?? item?.serviceDetails ?? item;
+  const location = source?.location?.[0] ?? {};
+  return { id: idOf(source, index, prefix) !== `${prefix}-${source?.name ?? source?.title ?? index}` ? idOf(source, index, prefix) : idOf(item, index, prefix), serviceTypeId: source?.serviceTypeId ?? item?.serviceTypeId, name: source?.name ?? source?.serviceName ?? source?.title ?? 'Service', description: source?.description ?? source?.mainDescription ?? '', duration: Number(source?.duration ?? source?.serviceDuration ?? source?.timeInMin ?? 0), original: Number(source?.originalPrice ?? source?.mrp ?? source?.price ?? location.originalPrice ?? 0), price: Number(source?.discountPrice ?? source?.sellingPrice ?? source?.discountedPrice ?? source?.discountedPriceWithTax ?? source?.amount ?? source?.price ?? location.discountPrice ?? 0), brand: source?.brand ?? source?.brands ?? '', image: imageOf(source) };
 }
 export function mapPackage(item, index) {
   return { ...mapService(item, index, 'package'), name: item?.name ?? item?.packageName ?? item?.title ?? 'Package', isPackage: true, packageId: item?._id ?? item?.id ?? item?.packageId };
 }
 
-async function get(path) { const response = await apiClient.get(path); return collection(response.data, path); }
+async function get(path) { const response = await apiClient.get(path, { params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } }); return collection(response.data, path); }
+
+function flattenServices(items) { const walk = (item, parentId) => { if (!item || typeof item !== 'object') return []; const nested = item.services ?? item.serviceTypes ?? item.items; if (Array.isArray(nested) && nested.length) return nested.flatMap((child) => walk(child, child.categoryId ?? item._id ?? item.id ?? parentId)); return [{ ...item, categoryId: item.categoryId ?? parentId }]; }; return items.flatMap((item) => walk(item, null)); }
 
 export const homeService = Object.freeze({
   async banners() { return get(userEndpoints.banners.static); },
   async categories() { return get(userEndpoints.catalog.categories); },
-  async services() { return get(userEndpoints.catalog.services); },
-  async packages() { return get(userEndpoints.catalog.packages); },
+  async services() { return flattenServices(await get(userEndpoints.catalog.services)); },
+  async packages() {
+    const rows = await get(userEndpoints.catalog.packages);
+    // The User packages endpoint returns category wrappers with a singular
+    // `package` array. Flatten that exact response and never turn an empty
+    // category into a fake package card.
+    return rows.flatMap((item) => {
+      if (Array.isArray(item?.package)) return item.package;
+      if (Array.isArray(item?.packages)) return item.packages;
+      return [item];
+    });
+  },
   async mostSearched() { return get(userEndpoints.catalog.mostSearched); },
   async recommended() { return get(userEndpoints.catalog.frequentlyAddedServices); },
 });

@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, ShoppingCart, Menu, X, ChevronDown, MapPin } from 'lucide-react';
 import { Logo } from './CommonComponents.jsx';
 import { ORANGE } from '../models/constants.js';
 import { clearAuthentication, getUserToken } from '../services/api/tokenStorage.js';
 
 export function Navbar({ go, totals, mobileOpen, setMobileOpen }) {
+  const [search, setSearch] = useState('');
   useEffect(() => {
     const handler = () => go('/');
     window.addEventListener('nav-home', handler);
@@ -24,13 +25,13 @@ export function Navbar({ go, totals, mobileOpen, setMobileOpen }) {
     <header className="sticky top-0 z-50 border-b border-neutral-200 bg-white/95 backdrop-blur">
       <nav className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 lg:px-6">
         <Logo onClick={() => go('/')} />
-        <button className="hidden items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium md:flex">
+        <button onClick={() => go('/address')} className="hidden items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium md:flex">
           <MapPin size={17} color={ORANGE} /> Noida, Sector 145 <ChevronDown size={15} />
         </button>
-        <label className="hidden min-w-56 flex-1 items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 md:flex">
+        <form onSubmit={(event) => { event.preventDefault(); if (search.trim()) go(`/women-services?search=${encodeURIComponent(search.trim())}`); }} className="hidden min-w-56 flex-1 items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 md:flex">
           <Search size={16} />
-          <input className="w-full outline-none" placeholder='Search for "Facial"' />
-        </label>
+          <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full outline-none" placeholder='Search for "Facial"' />
+        </form>
         <div className="hidden items-center gap-1 lg:flex">
           {links.map(([label, href]) => (
             <button key={href} onClick={() => go(href)} className="nav-link">
@@ -55,7 +56,7 @@ export function Navbar({ go, totals, mobileOpen, setMobileOpen }) {
         <div className="border-t border-neutral-200 bg-white px-4 pb-4 lg:hidden">
           <div className="mb-3 flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm">
             <Search size={16} />
-            <input className="w-full outline-none" placeholder="Search services" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && search.trim()) go(`/women-services?search=${encodeURIComponent(search.trim())}`); }} className="w-full outline-none" placeholder="Search services" />
           </div>
           {links.map(([label, href]) => (
             <button

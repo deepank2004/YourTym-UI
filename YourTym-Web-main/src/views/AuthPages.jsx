@@ -9,6 +9,7 @@ import {
   savePendingLogin,
 } from '../services/api/authFlowStorage.js';
 import { getUserToken, setUserToken } from '../services/api/tokenStorage.js';
+import { getProfile } from '../services/api/profileService.js';
 
 function BackButton() {
   return (
@@ -107,6 +108,7 @@ export function LoginPage({ go, step = 'phone' }) {
       savePendingLogin({
         phone: normalizedPhone,
         loginId: result.loginId,
+        isRegistered: result.isRegistered,
         message: result.message,
       });
       setFeedback({ type: 'success', message: result.message });
@@ -158,7 +160,22 @@ export function LoginPage({ go, step = 'phone' }) {
 
       setUserToken(result.token);
       clearPendingLogin();
-      go('/signup');
+      let existingProfile = false;
+      if (!result.isNewUser && !pending.isRegistered) {
+        try {
+          const profileResult = await getProfile();
+          existingProfile = Object.values(profileResult.profile || {}).some((value) => String(value || '').trim());
+        } catch {
+          existingProfile = false;
+        }
+      }
+      if ((result.isRegistered || pending.isRegistered || existingProfile) && !result.isNewUser) {
+        const destination = sessionStorage.getItem('authReturnPath') || '/';
+        sessionStorage.removeItem('authReturnPath');
+        go(destination);
+      } else {
+        go('/signup');
+      }
     } catch (error) {
       setFeedback({
         type: 'error',

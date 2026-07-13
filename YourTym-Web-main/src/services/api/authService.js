@@ -19,8 +19,12 @@ function getAuthToken(payload) {
   return (
     payload?.token ||
     payload?.data?.token ||
+    payload?.data?.user?.token ||
+    payload?.user?.token ||
     payload?.accessToken ||
     payload?.data?.accessToken ||
+    payload?.data?.user?.accessToken ||
+    payload?.user?.accessToken ||
     null
   );
 }
@@ -39,6 +43,7 @@ export async function loginWithPhone(phone) {
 
   return {
     loginId: getTemporaryLoginId(payload),
+    isRegistered: payload?.isRegistered ?? payload?.data?.isRegistered ?? payload?.data?.user?.isRegistered ?? Boolean(payload?.user || payload?.data?.user),
     message: getSuccessMessage(payload),
   };
 }
@@ -60,6 +65,8 @@ export async function verifyOtp({ loginId, otp, deviceToken }) {
 
   return {
     token,
+    isRegistered: payload?.isRegistered ?? payload?.data?.isRegistered ?? payload?.data?.user?.isRegistered ?? Boolean(payload?.user || payload?.data?.user),
+    isNewUser: payload?.isNewUser ?? payload?.data?.isNewUser ?? false,
     message: getResponseMessage(payload, 'Login successful.'),
   };
 }

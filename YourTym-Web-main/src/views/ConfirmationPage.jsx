@@ -28,8 +28,10 @@ export function ConfirmationPage({ go, cart, updateQty, totals }) {
     setValidationMessage('');
   };
 
+  const slotValue = (slot) => typeof slot === 'string' ? slot : slot.startTime ?? slot.time ?? slot.slotTime ?? slot.start ?? slot.from ?? slot.label ?? '';
+  const slotLabel = (slot) => typeof slot === 'string' ? slot : slot.label ?? slot.time ?? slot.slotTime ?? (slot.startTime && slot.endTime ? `${slot.startTime} - ${slot.endTime}` : slot.start ?? slot.from ?? '');
   const handleTimeClick = (slot) => {
-    setSelectedTime(slot.startTime ?? slot.time ?? slot);
+    setSelectedTime(slotValue(slot));
     sessionStorage.setItem('checkoutTime', JSON.stringify(slot));
     setValidationMessage('');
   };
@@ -44,7 +46,7 @@ export function ConfirmationPage({ go, cart, updateQty, totals }) {
     }
     const slot = JSON.parse(sessionStorage.getItem('checkoutTime') || '{}');
     setSubmitting(true);
-    checkoutService.selectDateTime(selectedDate, slot.startTime ?? selectedTime, slot.endTime ?? selectedTime).then(() => go('/address')).catch((error) => setValidationMessage(error.message)).finally(() => setSubmitting(false));
+    checkoutService.selectDateTime(selectedDate, slot.startTime ?? slot.start ?? slot.from ?? selectedTime, slot.endTime ?? slot.end ?? slot.to ?? selectedTime).then(() => go('/address')).catch((error) => setValidationMessage(error.message)).finally(() => setSubmitting(false));
   };
 
   return (
@@ -66,11 +68,11 @@ export function ConfirmationPage({ go, cart, updateQty, totals }) {
               {loading && <p>Loading available slots…</p>}
               {slots.map((slot, index) => (
                 <button 
-                  key={slot.id ?? `${slot.startTime ?? slot.time}-${index}`}
-                  className={selectedTime === (slot.startTime ?? slot.time ?? slot) ? 'selected-slot' : ''}
+                  key={slot.id ?? `${slotValue(slot)}-${index}`}
+                  className={selectedTime === slotValue(slot) ? 'selected-slot' : ''}
                   onClick={() => handleTimeClick(slot)}
                 >
-                  {slot.label ?? slot.time ?? `${slot.startTime ?? ''} - ${slot.endTime ?? ''}`}
+                  {slotLabel(slot) || 'Unavailable'}
                 </button>
               ))}
             </div>

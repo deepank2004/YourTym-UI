@@ -33,7 +33,10 @@ export class CartItem {
     this.price = item.price;
     this.brand = item.brand || undefined;
     this.image = item.image;
-    this.qty = qty;
+      this.qty = qty;
+      this.backendId = item.backendId;
+      this.updateField = item.updateField;
+      this.isPackage = item.isPackage;
   }
 }
 

@@ -7,7 +7,7 @@ export class FormatService {
     return cart.reduce(
       (acc, item) => ({
         price: acc.price + item.price * item.qty,
-        duration: acc.duration + item.duration * item.qty,
+        duration: acc.duration + (Number(item.duration) || 0) * (Number(item.qty) || 0),
         count: acc.count + item.qty,
       }),
       { price: 0, duration: 0, count: 0 }

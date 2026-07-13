@@ -38,7 +38,7 @@ export function Reviews({ reviews }) {
       </div>
       <div className="review-grid">
         {reviews.map((review, i) => (
-          <article className="review" key={i}>
+          <article className="review" key={review.id ?? `review-${i}`}>
             <div>
               {Array.from({ length: 5 }).map((_, n) => (
                 <Star key={n} size={15} fill={ORANGE} color={ORANGE} />
