@@ -29,7 +29,7 @@ function flattenServices(items) { const walk = (item, parentId) => { if (!item |
 
 export const homeService = Object.freeze({
   async banners() { return get(userEndpoints.banners.static); },
-  async categories() { return get(userEndpoints.catalog.categories); },
+  async categories() { return (await get(userEndpoints.catalog.categories)).map((item) => item?.category ?? item).filter((item) => item && (item._id || item.id) && item.name); },
   async services() { return flattenServices(await get(userEndpoints.catalog.services)); },
   async packages() {
     const rows = await get(userEndpoints.catalog.packages);

@@ -29,6 +29,15 @@ import { getUserToken } from './services/api/tokenStorage.js';
 function App() {
   const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    const showApiAlert = (event) => {
+      const message = event.detail?.message;
+      if (message) window.alert(message);
+    };
+    window.addEventListener('api-error', showApiAlert);
+    return () => window.removeEventListener('api-error', showApiAlert);
+  }, []);
+
 useEffect(() => {
   const timer = setTimeout(() => {
     setLoading(false);

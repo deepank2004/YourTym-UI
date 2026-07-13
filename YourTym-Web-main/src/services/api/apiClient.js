@@ -37,6 +37,9 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const normalized = normalizeApiError(error);
+    if (typeof window !== 'undefined' && normalized.message) {
+      window.dispatchEvent(new CustomEvent('api-error', { detail: { message: normalized.message, status: normalized.status } }));
+    }
     if (normalized.status === 401 && typeof window !== 'undefined') {
       clearAuthentication();
       if (window.location.pathname !== '/login') {

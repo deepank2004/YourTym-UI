@@ -44,7 +44,7 @@ export function useCartViewModel() {
   const updateQty = async (id, delta) => {
     const item = cart.find((entry) => entry.id === id); if (!item) return;
     const quantity = Math.min(99, Math.max(1, item.qty + delta));
-      if (quantity !== item.qty) { try { const backendId = item.backendId ?? id; if (item.isPackage) await cartService.updatePackage(backendId, quantity); else await cartService.updateService(backendId, quantity, item.updateField); } catch (error) { if (error.status === 404 || /not found in the cart/i.test(error.message || '')) { setCart((items) => items.filter((entry) => entry.id !== id)); setCartError('This stale cart item was removed.'); } else setCartError(error.message || 'Unable to update quantity.'); return; } }
+      if (quantity !== item.qty) { try { const backendId = item.backendId ?? id; if (item.isPackage) await cartService.updatePackage(backendId, quantity); else await cartService.updateService(backendId, quantity, item.updateField); } catch (error) { setCartError(error.message || 'Unable to update quantity.'); return; } }
     setCart((items) => items.map((entry) => entry.id === id ? { ...entry, qty: quantity } : entry));
   };
 

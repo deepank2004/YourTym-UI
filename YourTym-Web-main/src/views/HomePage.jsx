@@ -36,7 +36,7 @@ export function HomePage({ go, addItem }) {
   const packages = data.packages.items.map(mapPackage);
   const banners = data.banners.items;
   const bannerImage = banners[0]?.image ?? banners[0]?.imageUrl ?? banners[0]?.bannerImage ?? banners[0]?.media?.url;
-  const categories = data.categories.items;
+  const categories = data.categories.items.map((item) => item?.category ?? item).filter((item) => item && (item._id || item.id || item.name));
   const searched = data.searched.items.map((item, index) => typeof item === 'string' ? { id: `search-${item}`, label: item } : { id: String(item?._id ?? item?.id ?? item?.name ?? index), label: item?.name ?? item?.title ?? item?.serviceName ?? 'Service' });
 
   return <div className="animate-in">
