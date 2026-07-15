@@ -6,6 +6,8 @@ import { clearAuthentication, getUserToken } from '../services/api/tokenStorage.
 
 export function Navbar({ go, totals, mobileOpen, setMobileOpen }) {
   const [search, setSearch] = useState('');
+  const [locationLabel, setLocationLabel] = useState(() => { const saved = localStorage.getItem('locationLabel'); return saved && saved !== 'Noida, Sector 145' ? saved : 'Detecting location…'; });
+  useEffect(() => { const update = (event) => setLocationLabel(event.detail?.label || localStorage.getItem('locationLabel') || 'Current location'); window.addEventListener('location-updated', update); return () => window.removeEventListener('location-updated', update); }, []);
   useEffect(() => {
     const handler = () => go('/');
     window.addEventListener('nav-home', handler);
@@ -26,7 +28,7 @@ export function Navbar({ go, totals, mobileOpen, setMobileOpen }) {
       <nav className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 lg:px-6">
         <Logo onClick={() => go('/')} />
         <button onClick={() => go('/address')} className="hidden items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium md:flex">
-          <MapPin size={17} color={ORANGE} /> Noida, Sector 145 <ChevronDown size={15} />
+          <MapPin size={17} color={ORANGE} /> {locationLabel} <ChevronDown size={15} />
         </button>
         <form onSubmit={(event) => { event.preventDefault(); if (search.trim()) go(`/women-services?search=${encodeURIComponent(search.trim())}`); }} className="hidden min-w-56 flex-1 items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 md:flex">
           <Search size={16} />
@@ -77,16 +79,12 @@ export function Navbar({ go, totals, mobileOpen, setMobileOpen }) {
 export function Footer({ go }) {
   return (
     <footer className="footer">
-      <div>
-        <Logo />
-        <p>Premium salon, spa and grooming bookings for every schedule.</p>
-      </div>
-      <div>
-        <button onClick={() => go('/women-services')}>Women Services</button>
-        <button onClick={() => go('/men-services')}>Men Services</button>
-        <button onClick={() => go('/offers')}>Offers</button>
-        <button onClick={() => go('/booking-history')}>Booking History</button>
-      </div>
+      <div className="footer-brand"><Logo /><p>Premium salon, spa and grooming bookings for every schedule.</p></div>
+      <div className="footer-column"><h3>Company</h3><button onClick={() => go('/about')}>About us</button><button onClick={() => go('/offers')}>Offers</button><button onClick={() => go('/privacy')}>Privacy policy</button><button onClick={() => go('/terms')}>Terms & conditions</button></div>
+      <div className="footer-column"><h3>For customers</h3><button onClick={() => go('/booking-history')}>Booking History</button><button onClick={() => go('/women-services')}>Women Services</button><button onClick={() => go('/men-services')}>Men Services</button><button onClick={() => go('/address')}>Contact us</button></div>
+      <div className="footer-column"><h3>For professionals</h3><button onClick={() => go('/login')}>Register as a professional</button></div>
+      <div className="footer-column footer-social"><h3>Social links</h3><div className="social-icons"><a href="https://www.instagram.com/yourtymcompany?igsh=OTE0cmdyZXVrMG5k" target="_blank" rel="noreferrer" aria-label="Instagram">◎</a><a href="https://www.linkedin.com/company/yourtym-company/" target="_blank" rel="noreferrer" aria-label="LinkedIn">in</a></div><div className="store-badges"><a href="https://apps.apple.com/in/app/yourtym-ab-experts-ghar-pe/id6752496999" target="_blank" rel="noreferrer"> App Store</a><a href="https://play.google.com/store/apps/details?id=com.yourtym_user" target="_blank" rel="noreferrer">▶ Google Play</a></div></div>
+      <div className="footer-bottom">© {new Date().getFullYear()} YourTym. All rights reserved.</div>
     </footer>
   );
 }

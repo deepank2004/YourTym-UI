@@ -27,7 +27,8 @@ export function mapProfileResponse(payload) {
 }
 
 export async function updateLocation({ currentLat, currentLong, city, sector }) {
-  const body = { currentLat, currentLong, city };
+  const body = { currentLat, currentLong };
+  if (city) body.city = city;
   if (sector) body.sector = sector;
   const response = await apiClient.put(userEndpoints.profile.updateLocation, body);
   return response.data;
@@ -36,9 +37,11 @@ export async function updateLocation({ currentLat, currentLong, city, sector }) 
 export async function getProfile() {
   const response = await apiClient.get(userEndpoints.profile.get);
   const payload = response.data || {};
+  const profile = payload?.data?.user || payload?.data?.data?.user || payload?.user || payload?.data?.data || payload?.data || {};
 
   return {
     profile: mapProfileResponse(payload),
+    cityId: profile?.city?._id ?? profile?.cityId ?? profile?.location?.city?._id ?? profile?.location?.city ?? '',
     message: getPayloadMessage(payload, ''),
   };
 }

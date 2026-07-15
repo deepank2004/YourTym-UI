@@ -23,7 +23,9 @@ import { BookingHistoryPage } from './views/BookingHistoryPage.jsx';
 import { LoginPage, SuccessPage } from './views/AuthPages.jsx';
 import { ProfilePage } from './views/ProfilePage.jsx';
 import { OrderDetailsPage } from './views/OrderDetailsPage.jsx';
+import { CompanyPage } from './views/CompanyPages.jsx';
 import { getUserToken } from './services/api/tokenStorage.js';
+import { getProfile, updateLocation } from './services/api/profileService.js';
 
 
 function App() {
@@ -62,6 +64,37 @@ useEffect(() => {
   useEffect(() => { const expire = () => go('/login'); window.addEventListener('auth-expired', expire); return () => window.removeEventListener('auth-expired', expire); }, [go]);
   useEffect(() => { if (protectedPaths.some((route) => path === route || path.startsWith('/order-details/')) && !getUserToken()) { sessionStorage.setItem('authReturnPath', path); go('/login'); } }, [path, go]);
   useEffect(() => { if ((path === '/login' || path === '/otp' || path === '/signup') && getUserToken() && path === '/login') go(sessionStorage.getItem('authReturnPath') || '/'); }, [path, go]);
+  useEffect(() => {
+    if (!getUserToken() || !navigator.geolocation) return;
+    if (sessionStorage.getItem('locationPromptShown') && localStorage.getItem('locationLabel') && localStorage.getItem('locationLabel') !== 'Noida, Sector 145') return;
+    sessionStorage.setItem('locationPromptShown', 'true');
+    const allow = window.confirm('YourTym would like to access your location to show services available near you. Allow location access?');
+    if (!allow) return;
+    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      const currentLat = Number(coords.latitude.toFixed(6));
+      const currentLong = Number(coords.longitude.toFixed(6));
+      sessionStorage.setItem('lastLocation', JSON.stringify({ currentLat, currentLong }));
+      let label = `Current location (${currentLat}, ${currentLong})`;
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${currentLat}&lon=${currentLong}&format=json`, { headers: { Accept: 'application/json' } });
+        const place = await response.json();
+        const address = place?.address || {};
+        const cityName = address.city || address.town || address.village || address.municipality;
+        const sectorName = place?.display_name?.match(/Sector\s*[\w-]+/i)?.[0] || address.suburb?.match?.(/Sector\s*[\w-]+/i)?.[0];
+        const areaName = sectorName || address.suburb || address.neighbourhood || address.city_district || address.quarter || address.residential || address.road;
+        label = [cityName, areaName].filter(Boolean).join(', ') || place?.display_name || label;
+      } catch { /* Coordinates remain visible when reverse geocoding is unavailable. */ }
+      localStorage.setItem('locationLabel', label);
+      window.dispatchEvent(new CustomEvent('location-updated', { detail: { label } }));
+      try {
+        const profile = await getProfile();
+        const city = profile.cityId || localStorage.getItem('selectedCityId') || '';
+        await updateLocation({ currentLat, currentLong, city });
+      } catch (error) {
+        if (error?.message) window.alert(error.message);
+      }
+    }, () => { localStorage.setItem('locationLabel', 'Location unavailable'); window.dispatchEvent(new CustomEvent('location-updated', { detail: { label: 'Location unavailable' } })); window.alert('Location access was not granted. You can choose your location manually from the navbar.'); });
+  }, [path]);
 
   // Get data from services
   const womenServices = ServiceDataService.getWomenServices();
@@ -89,6 +122,12 @@ useEffect(() => {
       <PackagesPage {...pageProps} packages={packages} />
     ) : path === '/edit-package' ? (
       <EditPackagePage {...pageProps} />
+    ) : path === '/about' ? (
+      <CompanyPage type="about" {...pageProps} />
+    ) : path === '/privacy' ? (
+      <CompanyPage type="privacy" {...pageProps} />
+    ) : path === '/terms' ? (
+      <CompanyPage type="terms" {...pageProps} />
     ) : path === '/offers' ? (
       <OffersPage {...pageProps} />
     ) : path === '/cart' ? (
