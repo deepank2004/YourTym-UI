@@ -13,6 +13,7 @@ import { Navbar, Footer } from './components/Navigation.jsx';
 import { HomePage } from './views/HomePage.jsx';
 import { ServicesPage } from './views/ServicesPage.jsx';
 import { PackagesPage } from './views/PackagesPage.jsx';
+import { CategoryPackagesPage } from './views/CategoryPackagesPage.jsx';
 import { EditPackagePage } from './views/EditPackagePage.jsx';
 import { OffersPage } from './views/OffersPage.jsx';
 import { CartPage } from './views/CartPage.jsx';
@@ -118,6 +119,8 @@ useEffect(() => {
       <ServicesPage gender="Women" services={womenServices} {...pageProps} />
     ) : path.startsWith('/men-services') ? (
       <ServicesPage gender="Men" services={menServices} {...pageProps} />
+    ) : path.startsWith('/packages/') ? (
+      <CategoryPackagesPage {...pageProps} mainCategoryId={decodeURIComponent(path.split('/')[2] || '')} categoryId={decodeURIComponent(path.split('/')[3] || '')} />
     ) : path === '/packages' ? (
       <PackagesPage {...pageProps} packages={packages} />
     ) : path === '/edit-package' ? (

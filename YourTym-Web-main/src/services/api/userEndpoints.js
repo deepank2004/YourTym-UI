@@ -1,4 +1,4 @@
-import { USER_API_PATH } from './apiConfig.js';
+import { API_VERSION_PATH, USER_API_PATH } from './apiConfig.js';
 
 function requiredSegment(value, name) {
   if (value === undefined || value === null || value === '') {
@@ -11,6 +11,11 @@ function requiredSegment(value, name) {
 function userPath(path = '') {
   if (!path) return USER_API_PATH;
   return `${USER_API_PATH}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+function adminPath(path = '') {
+  if (!path) return `${API_VERSION_PATH}/admin`;
+  return `${API_VERSION_PATH}/admin${path.startsWith('/') ? path : `/${path}`}`;
 }
 
 // These are host-agnostic paths. Eight requests in the supplied collection use
@@ -32,6 +37,11 @@ export const userEndpoints = Object.freeze({
     services: userPath('/Category/allServices'),
     packages: userPath('/Category/allPackges'),
     categories: userPath('/Category/allCategory'),
+    mainCategories: adminPath('/mainCategory/allCategory'),
+    categoriesByMainCategory: (mainCategoryId) => adminPath(`/Category/allCategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}`),
+    subCategoriesByCategory: (mainCategoryId, categoryId) => adminPath(`/SubCategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}/${requiredSegment(categoryId, 'categoryId')}`),
+    packagesByMainCategory: (mainCategoryId) => adminPath(`/PackagebyMaincategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}`),
+    packagesByCategory: (mainCategoryId, categoryId) => adminPath(`/Packagebycategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}/${requiredSegment(categoryId, 'categoryId')}`),
     search: userPath('/Category/search'),
     mostSearched: userPath('/most-searched'),
     frequentlyAddedServices: userPath('/frequently-added-services'),

@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowRight, Check, MapPin } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, ArrowRight, Check, MapPin, X } from 'lucide-react';
 import { ServiceCard } from '../components/ServiceCard.jsx';
 import { PackageGrid } from '../components/CartComponents.jsx';
 import { OffersStrip, Reviews } from '../components/OffersReviews.jsx';
 import { SectionTitle, EntryCard } from '../components/CommonComponents.jsx';
 import { homeService, mapService, mapPackage } from '../services/api/homeService.js';
+import { categoryService } from '../services/api/categoryService.js';
 import { images } from '../models/constants.js';
 import { userAdditionalService } from '../services/api/userAdditionalService.js';
 
@@ -36,9 +38,35 @@ function categoryImage(category, index) {
     ?? categoryFallbackImages[index % categoryFallbackImages.length];
 }
 
-function categoryRoute(category) {
-  if (category?.route) return category.route;
-  return String(category?.gender ?? '').toLowerCase() === 'men' ? '/men-services' : '/women-services';
+function categoryTitle(category) {
+  return category?.mainCategory?.name
+    ?? category?.mainCategoryName
+    ?? category?.name
+    ?? category?.title
+    ?? category?.categoryName
+    ?? category?.subCategoryName
+    ?? 'Category';
+}
+
+function categoryMedia(category) {
+  const source = category ?? {};
+  const mediaUrl = (value) => typeof value === 'string' ? value : (value?.url ?? value?.path ?? value?.secure_url ?? '');
+  const mediaType = source?.media?.type ?? source?.media?.mimeType ?? '';
+  return {
+    image: mediaUrl(source?.image) || mediaUrl(source?.imageUrl) || mediaUrl(source?.thumbnail) || mediaUrl(source?.thumbnailUrl) || mediaUrl(source?.bannerImage) || mediaUrl(source?.media) || mediaUrl(source?.media?.image) || mediaUrl(source?.media?.imageUrl) || (/video/i.test(mediaType) ? '' : mediaUrl(source?.media?.url)),
+    video: mediaUrl(source?.video) || mediaUrl(source?.videoUrl) || mediaUrl(source?.videoURL) || mediaUrl(source?.videoLink) || mediaUrl(source?.media?.video) || mediaUrl(source?.media?.videoUrl) || mediaUrl(source?.media?.videoURL) || (/video/i.test(mediaType) ? mediaUrl(source?.media?.url) : ''),
+  };
+}
+
+function mainCategoryIdOf(category) {
+  const value = category?.mainCategoryId
+    ?? category?.mainCategory?._id
+    ?? category?.mainCategory?.id
+    ?? category?.mainCategoryId?._id
+    ?? category?.mainCategoryId?.id
+    ?? category?._id
+    ?? category?.id;
+  return typeof value === 'object' ? (value?._id ?? value?.id) : value;
 }
 
 export function HomePage({ go, addItem }) {
@@ -51,12 +79,120 @@ export function HomePage({ go, addItem }) {
     recommended: initial(),
   });
   const [testimonials, setTestimonials] = useState([]);
+  const [activeMainCategory, setActiveMainCategory] = useState(null);
+  const [associatedCategories, setAssociatedCategories] = useState(initial());
+  const [activeCategory, setActiveCategory] = useState(null);
+  const [subCategories, setSubCategories] = useState(initial());
+  const categoryRequestRef = useRef(0);
+
+  const closeCategoryModal = () => {
+    categoryRequestRef.current += 1;
+    setActiveMainCategory(null);
+    setActiveCategory(null);
+    setSubCategories(initial());
+  };
+
+  const backToCategories = () => {
+    categoryRequestRef.current += 1;
+    setActiveCategory(null);
+    setSubCategories(initial());
+  };
+
+  const openCategoryModal = async (category) => {
+    const mainCategoryId = mainCategoryIdOf(category);
+    const title = category?.mainCategory?.name ?? category?.mainCategoryName ?? categoryTitle(category);
+
+    const requestId = categoryRequestRef.current + 1;
+    categoryRequestRef.current = requestId;
+    setActiveMainCategory({ id: mainCategoryId ? String(mainCategoryId) : '', title, ...categoryMedia(category) });
+    setAssociatedCategories(initial());
+    setActiveCategory(null);
+    setSubCategories(initial());
+
+    if (!mainCategoryId) {
+      setAssociatedCategories({ status: 'error', items: [], error: 'This category is missing its main-category ID.' });
+      return;
+    }
+
+    try {
+      const items = await categoryService.listCategoriesByMainCategory(mainCategoryId);
+      if (categoryRequestRef.current === requestId) {
+        setAssociatedCategories({ status: items.length ? 'success' : 'empty', items, error: '' });
+      }
+    } catch (error) {
+      if (categoryRequestRef.current === requestId) {
+        setAssociatedCategories({ status: 'error', items: [], error: error.message || 'Unable to load associated categories.' });
+      }
+    }
+  };
+
+  const openSubCategoryModal = async (category) => {
+    const mainCategoryId = activeMainCategory?.id ?? mainCategoryIdOf(category);
+    const categoryId = category?._id ?? category?.id;
+    const title = categoryTitle(category);
+    const requestId = categoryRequestRef.current + 1;
+    categoryRequestRef.current = requestId;
+    setActiveCategory({ id: categoryId ? String(categoryId) : '', title, ...categoryMedia(category) });
+    setSubCategories(initial());
+
+    if (!mainCategoryId || !categoryId) {
+      setSubCategories({ status: 'error', items: [], error: 'This category is missing the required IDs.' });
+      return;
+    }
+
+    try {
+      const items = await categoryService.listSubCategories(mainCategoryId, categoryId);
+      if (categoryRequestRef.current === requestId) {
+        setSubCategories({ status: items.length ? 'success' : 'empty', items, error: '' });
+      }
+    } catch (error) {
+      if (categoryRequestRef.current === requestId) {
+        setSubCategories({ status: 'error', items: [], error: error.message || 'Unable to load subcategories.' });
+      }
+    }
+  };
+
+  const openPackagePage = (subCategory) => {
+    const mainCategoryId = activeMainCategory?.id;
+    // The package page fetches the main-category collection. The parent
+    // category and selected subcategory are retained for the page context.
+    const categoryId = activeCategory?.id;
+    if (!mainCategoryId || !categoryId) {
+      window.alert('This category is missing the IDs required to load packages.');
+      return;
+    }
+    sessionStorage.setItem('selectedPackageContext', JSON.stringify({
+      mainCategoryId: String(mainCategoryId),
+      categoryId: String(categoryId),
+      mainCategoryName: activeMainCategory?.title ?? 'YourTym',
+      categoryName: activeCategory?.title ?? 'Selected category',
+      subCategoryName: categoryTitle(subCategory),
+      image: categoryMedia(subCategory).image || activeCategory?.image || activeMainCategory?.image || '',
+      video: categoryMedia(subCategory).video || activeCategory?.video || activeMainCategory?.video || '',
+    }));
+    closeCategoryModal();
+    go(`/packages/${encodeURIComponent(mainCategoryId)}/${encodeURIComponent(categoryId)}`);
+  };
+
+  useEffect(() => {
+    if (!activeMainCategory) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') closeCategoryModal();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeMainCategory]);
 
   useEffect(() => {
     let active = true;
     const requests = Object.entries({
       banners: homeService.banners,
-      categories: homeService.categories,
+      categories: categoryService.listMainCategories,
       services: homeService.services,
       packages: homeService.packages,
       searched: homeService.mostSearched,
@@ -106,8 +242,35 @@ export function HomePage({ go, addItem }) {
     images.massage,
   ];
 
+  const categoryModal = activeMainCategory && (
+    <div className="home-category-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCategoryModal(); }}>
+      <div className="home-category-modal-card" role="dialog" aria-modal="true" aria-labelledby="home-category-modal-title">
+        <button className="home-category-modal-close" type="button" aria-label="Close categories" onClick={closeCategoryModal}><X size={27} strokeWidth={2.4} /></button>
+        <div className="home-category-modal-heading">
+          {activeCategory && <button type="button" className="home-category-modal-back" onClick={backToCategories}><ArrowLeft size={18} /> Back</button>}
+          <p className="eyebrow">Explore categories</p>
+          <h2 id="home-category-modal-title">{activeCategory?.title ?? activeMainCategory.title}</h2>
+        </div>
+        <SectionState state={activeCategory ? subCategories : associatedCategories} empty={activeCategory ? 'No subcategories are available for this category.' : 'No categories are available for this main category.'}>
+          <div className="home-associated-grid">
+            {(activeCategory ? subCategories.items : associatedCategories.items).map((category, index) => {
+              const title = categoryTitle(category);
+              return (
+                <button type="button" className="home-associated-category" key={String(category?._id ?? category?.id ?? `${title}-${index}`)} onClick={() => (activeCategory ? openPackagePage(category) : openSubCategoryModal(category))}>
+                  <span className="home-associated-image"><img src={categoryImage(category, index)} alt={title} /></span>
+                  <span>{title}</span>
+                </button>
+              );
+            })}
+          </div>
+        </SectionState>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="animate-in home-page">
+    <>
+      <div className="animate-in home-page">
       <section className="section home-showcase">
         <div className="home-intro">
           <div className="home-intro-copy">
@@ -131,9 +294,9 @@ export function HomePage({ go, addItem }) {
             <SectionState state={data.categories} empty="No categories available near you.">
               <div className="home-category-grid">
                 {categories.slice(0, 8).map((category, index) => {
-                  const title = category?.name ?? category?.title ?? 'Category';
+                  const title = categoryTitle(category);
                   return (
-                    <button className="home-category" key={String(category?._id ?? category?.id ?? title)} onClick={() => go(categoryRoute(category))}>
+                    <button type="button" className="home-category" key={String(category?._id ?? category?.id ?? title)} onClick={() => openCategoryModal(category)}>
                       <span className="home-category-image"><img src={categoryImage(category, index)} alt={title} /></span>
                       <span>{title}</span>
                     </button>
@@ -200,6 +363,9 @@ export function HomePage({ go, addItem }) {
       <section className="section"><OffersStrip go={go} /></section>
       <section className="section entry-grid"><EntryCard title="For Women" image={images.womenSalon} go={() => go('/women-services')} /><EntryCard title="For Men" image={images.menSalon} go={() => go('/men-services')} /></section>
       <Reviews reviews={testimonials.map((item, index) => ({ id: item?._id ?? item?.id ?? `testimonial-${index}`, author: item?.name ?? item?.user?.fullName ?? 'YourTym customer', text: item?.comment ?? item?.description ?? item?.review ?? '' }))} />
-    </div>
+
+      </div>
+      {categoryModal && typeof document !== 'undefined' ? createPortal(categoryModal, document.body) : null}
+    </>
   );
 }
