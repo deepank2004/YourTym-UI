@@ -1,6 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { ArrowRight, Check, MapPin, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ArrowRight, Check, MapPin } from 'lucide-react';
 import { ServiceCard } from '../components/ServiceCard.jsx';
 import { PackageGrid } from '../components/CartComponents.jsx';
 import { OffersStrip, Reviews } from '../components/OffersReviews.jsx';
@@ -48,16 +47,6 @@ function categoryTitle(category) {
     ?? 'Category';
 }
 
-function categoryMedia(category) {
-  const source = category ?? {};
-  const mediaUrl = (value) => typeof value === 'string' ? value : (value?.url ?? value?.path ?? value?.secure_url ?? '');
-  const mediaType = source?.media?.type ?? source?.media?.mimeType ?? '';
-  return {
-    image: mediaUrl(source?.image) || mediaUrl(source?.imageUrl) || mediaUrl(source?.thumbnail) || mediaUrl(source?.thumbnailUrl) || mediaUrl(source?.bannerImage) || mediaUrl(source?.media) || mediaUrl(source?.media?.image) || mediaUrl(source?.media?.imageUrl) || (/video/i.test(mediaType) ? '' : mediaUrl(source?.media?.url)),
-    video: mediaUrl(source?.video) || mediaUrl(source?.videoUrl) || mediaUrl(source?.videoURL) || mediaUrl(source?.videoLink) || mediaUrl(source?.media?.video) || mediaUrl(source?.media?.videoUrl) || mediaUrl(source?.media?.videoURL) || (/video/i.test(mediaType) ? mediaUrl(source?.media?.url) : ''),
-  };
-}
-
 function mainCategoryIdOf(category) {
   const value = category?.mainCategoryId
     ?? category?.mainCategory?._id
@@ -79,73 +68,13 @@ export function HomePage({ go, addItem }) {
     recommended: initial(),
   });
   const [testimonials, setTestimonials] = useState([]);
-  const [activeMainCategory, setActiveMainCategory] = useState(null);
-  const [associatedCategories, setAssociatedCategories] = useState(initial());
-  const categoryRequestRef = useRef(0);
-
-  const closeCategoryModal = () => {
-    categoryRequestRef.current += 1;
-    setActiveMainCategory(null);
-  };
-
-  const openCategoryModal = async (category) => {
+  const openMainCategoryPage = (category) => {
     const mainCategoryId = mainCategoryIdOf(category);
-    const title = category?.mainCategory?.name ?? category?.mainCategoryName ?? categoryTitle(category);
-
-    const requestId = categoryRequestRef.current + 1;
-    categoryRequestRef.current = requestId;
-    setActiveMainCategory({ id: mainCategoryId ? String(mainCategoryId) : '', title, ...categoryMedia(category) });
-    setAssociatedCategories(initial());
-
-    if (!mainCategoryId) {
-      setAssociatedCategories({ status: 'error', items: [], error: 'This category is missing its main-category ID.' });
-      return;
-    }
-
-    try {
-      const items = await categoryService.listCategoriesByMainCategory(mainCategoryId);
-      if (categoryRequestRef.current === requestId) {
-        setAssociatedCategories({ status: items.length ? 'success' : 'empty', items, error: '' });
-      }
-    } catch (error) {
-      if (categoryRequestRef.current === requestId) {
-        setAssociatedCategories({ status: 'error', items: [], error: error.message || 'Unable to load associated categories.' });
-      }
+    if (mainCategoryId) {
+      sessionStorage.setItem('selectedMainCategoryContext', JSON.stringify({ id: String(mainCategoryId), title: categoryTitle(category) }));
+      go(`/main-category/${encodeURIComponent(mainCategoryId)}`);
     }
   };
-
-  const openPackagesForCategory = (category) => {
-    const mainCategoryId = activeMainCategory?.id;
-    const categoryId = category?._id ?? category?.id;
-    if (!mainCategoryId || !categoryId) {
-      closeCategoryModal();
-      return;
-    }
-    sessionStorage.setItem('selectedPackageContext', JSON.stringify({
-      mainCategoryId: String(mainCategoryId),
-      categoryId: String(categoryId),
-      mainCategoryName: activeMainCategory?.title ?? 'YourTym',
-      categoryName: categoryTitle(category),
-      image: categoryMedia(category).image || activeMainCategory?.image || '',
-      video: categoryMedia(category).video || activeMainCategory?.video || '',
-    }));
-    closeCategoryModal();
-    go(`/packages/${encodeURIComponent(mainCategoryId)}/${encodeURIComponent(categoryId)}`);
-  };
-
-  useEffect(() => {
-    if (!activeMainCategory) return undefined;
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') closeCategoryModal();
-    };
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [activeMainCategory]);
 
   useEffect(() => {
     let active = true;
@@ -201,34 +130,8 @@ export function HomePage({ go, addItem }) {
     images.massage,
   ];
 
-  const categoryModal = activeMainCategory && (
-    <div className="home-category-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCategoryModal(); }}>
-      <div className="home-category-modal-card" role="dialog" aria-modal="true" aria-labelledby="home-category-modal-title">
-        <button className="home-category-modal-close" type="button" aria-label="Close categories" onClick={closeCategoryModal}><X size={27} strokeWidth={2.4} /></button>
-        <div className="home-category-modal-heading">
-          <p className="eyebrow">Explore categories</p>
-          <h2 id="home-category-modal-title">{activeMainCategory.title}</h2>
-        </div>
-        <SectionState state={associatedCategories} empty="No categories are available for this main category.">
-          <div className="home-associated-grid">
-            {associatedCategories.items.map((category, index) => {
-              const title = categoryTitle(category);
-              return (
-                <button type="button" className="home-associated-category" key={String(category?._id ?? category?.id ?? `${title}-${index}`)} onClick={() => openPackagesForCategory(category)}>
-                  <span className="home-associated-image"><img src={categoryImage(category, index)} alt={title} /></span>
-                  <span>{title}</span>
-                </button>
-              );
-            })}
-          </div>
-        </SectionState>
-      </div>
-    </div>
-  );
-
   return (
-    <>
-      <div className="animate-in home-page">
+    <div className="animate-in home-page">
       <section className="section home-showcase">
         <div className="home-intro">
           <div className="home-intro-copy">
@@ -254,7 +157,7 @@ export function HomePage({ go, addItem }) {
                 {categories.slice(0, 8).map((category, index) => {
                   const title = categoryTitle(category);
                   return (
-                    <button type="button" className="home-category" key={String(category?._id ?? category?.id ?? title)} onClick={() => openCategoryModal(category)}>
+                    <button type="button" className="home-category" key={String(category?._id ?? category?.id ?? title)} onClick={() => openMainCategoryPage(category)}>
                       <span className="home-category-image"><img src={categoryImage(category, index)} alt={title} /></span>
                       <span>{title}</span>
                     </button>
@@ -322,8 +225,6 @@ export function HomePage({ go, addItem }) {
       <section className="section entry-grid"><EntryCard title="For Women" image={images.womenSalon} go={() => go('/women-services')} /><EntryCard title="For Men" image={images.menSalon} go={() => go('/men-services')} /></section>
       <Reviews reviews={testimonials.map((item, index) => ({ id: item?._id ?? item?.id ?? `testimonial-${index}`, author: item?.name ?? item?.user?.fullName ?? 'YourTym customer', text: item?.comment ?? item?.description ?? item?.review ?? '' }))} />
 
-      </div>
-      {categoryModal && typeof document !== 'undefined' ? createPortal(categoryModal, document.body) : null}
-    </>
+    </div>
   );
 }

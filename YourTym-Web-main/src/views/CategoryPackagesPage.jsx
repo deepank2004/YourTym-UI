@@ -23,8 +23,35 @@ function contextFor(mainCategoryId, categoryId) {
   return {};
 }
 
+function mainContextFor(mainCategoryId) {
+  try {
+    const value = JSON.parse(sessionStorage.getItem('selectedMainCategoryContext') || 'null');
+    if (value?.id === String(mainCategoryId)) return value;
+  } catch {
+    // A missing context only affects the display label, not the API request.
+  }
+  return {};
+}
+
 function packageImage(pkg, index) {
   return safeMediaUrl(pkg?.image) || [images.spaWomen, images.facial, images.waxing, images.massage][index % 4];
+}
+
+function categoryLabel(category) {
+  return category?.name ?? category?.title ?? category?.categoryName ?? category?.subCategoryName ?? 'Category';
+}
+
+function categoryImage(category, index) {
+  return safeMediaUrl(category?.image ?? category?.imageUrl ?? category?.thumbnail ?? category?.media?.url)
+    || [images.womenSalon, images.facial, images.menSalon, images.massage, images.cleanup, images.manicure][index % 6];
+}
+
+function categoryMedia(category) {
+  const media = category?.media ?? {};
+  return {
+    image: safeMediaUrl(category?.image ?? category?.imageUrl ?? category?.thumbnail ?? media?.image ?? media?.imageUrl ?? media?.url),
+    video: safeMediaUrl(category?.video ?? category?.videoUrl ?? category?.videoURL ?? media?.video ?? media?.videoUrl),
+  };
 }
 
 function safeMediaUrl(value) {
@@ -121,16 +148,68 @@ function PackageRow({ pkg, index, addItem, anchorId }) {
   );
 }
 
-export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, categoryId }) {
+export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, categoryId, mainCategoryMode = false }) {
   const [state, setState] = useState({ status: 'loading', packages: [], error: '' });
   const [servicesState, setServicesState] = useState({ status: 'loading', items: [], error: '' });
+  const [categoriesState, setCategoriesState] = useState({ status: mainCategoryMode ? 'loading' : 'empty', items: [], error: '' });
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [serviceNotice, setServiceNotice] = useState('');
-  const context = useMemo(() => contextFor(mainCategoryId, categoryId), [mainCategoryId, categoryId]);
+  const selectedCategoryId = categoryId || (typeof selectedCategory?._id === 'object' ? selectedCategory?._id?._id ?? selectedCategory?._id?.id : selectedCategory?._id) || selectedCategory?.id || '';
+  const routeContext = useMemo(() => contextFor(mainCategoryId, selectedCategoryId), [mainCategoryId, selectedCategoryId]);
+  const mainContext = useMemo(() => mainContextFor(mainCategoryId), [mainCategoryId]);
+  const selectionMedia = useMemo(() => categoryMedia(selectedCategory), [selectedCategory]);
+  const context = useMemo(() => ({
+    mainCategoryName: selectedCategory?.mainCategory?.name ?? selectedCategory?.mainCategoryName ?? mainContext.title ?? '',
+    categoryName: categoryLabel(selectedCategory),
+    image: selectionMedia.image,
+    video: selectionMedia.video,
+    ...routeContext,
+  }), [mainContext.title, routeContext, selectedCategory, selectionMedia]);
   const categoryName = context.subCategoryName || context.categoryName || 'Selected services';
   const mainCategoryName = context.mainCategoryName || 'YourTym services';
 
   useEffect(() => {
+    if (!mainCategoryMode) return undefined;
     let active = true;
+    setCategoriesState({ status: 'loading', items: [], error: '' });
+    categoryService.listCategoriesByMainCategory(mainCategoryId)
+      .then((items) => {
+        if (!active) return;
+        setCategoriesState({ status: items.length ? 'success' : 'empty', items, error: '' });
+        setSelectedCategory((current) => current || items.find((item) => {
+          const rawId = item?._id ?? item?.id;
+          const id = typeof rawId === 'object' ? (rawId?._id ?? rawId?.id) : rawId;
+          return String(id || '') === String(categoryId || '');
+        }) || items[0] || null);
+      })
+      .catch((error) => {
+        if (active) setCategoriesState({ status: 'error', items: [], error: error.message || 'Unable to load categories for this main category.' });
+      });
+    return () => { active = false; };
+  }, [mainCategoryId, mainCategoryMode, categoryId]);
+
+  const selectCategory = (category) => {
+    const rawId = category?._id ?? category?.id;
+    const nextId = typeof rawId === 'object' ? (rawId?._id ?? rawId?.id) : rawId;
+    if (!nextId) return;
+    setSelectedCategory(category);
+    setServiceNotice('');
+    sessionStorage.setItem('selectedPackageContext', JSON.stringify({
+      mainCategoryId: String(mainCategoryId),
+      categoryId: String(nextId),
+      mainCategoryName,
+      categoryName: categoryLabel(category),
+      ...categoryMedia(category),
+    }));
+    if (mainCategoryMode) window.history.replaceState({}, '', `/main-category/${encodeURIComponent(mainCategoryId)}/${encodeURIComponent(nextId)}`);
+  };
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedCategoryId) {
+      setState({ status: 'empty', packages: [], error: '' });
+      return () => { active = false; };
+    }
     setState({ status: 'loading', packages: [], error: '' });
     categoryService.listPackagesByMainCategory(mainCategoryId)
       .then((packages) => {
@@ -141,12 +220,16 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
         if (active) setState({ status: 'error', packages: [], error: error.message || 'Unable to load packages for this category.' });
       });
     return () => { active = false; };
-  }, [mainCategoryId, categoryId]);
+  }, [mainCategoryId, selectedCategoryId]);
 
   useEffect(() => {
     let active = true;
+    if (!selectedCategoryId) {
+      setServicesState({ status: 'empty', items: [], error: '' });
+      return () => { active = false; };
+    }
     setServicesState({ status: 'loading', items: [], error: '' });
-    categoryService.listSubCategories(mainCategoryId, categoryId)
+    categoryService.listSubCategories(mainCategoryId, selectedCategoryId)
       .then((items) => {
         if (active) setServicesState({ status: items.length ? 'success' : 'empty', items, error: '' });
       })
@@ -154,7 +237,7 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
         if (active) setServicesState({ status: 'error', items: [], error: error.message || 'Unable to load services for this category.' });
       });
     return () => { active = false; };
-  }, [mainCategoryId, categoryId]);
+  }, [mainCategoryId, selectedCategoryId]);
 
   const heroMedia = useMemo(() => mediaFor(context, state.packages), [context, state.packages]);
   const scrollToServicePackage = (service) => {
@@ -171,9 +254,38 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
   return (
     <div className="animate-in category-packages-page">
       <BackButton />
+      {mainCategoryMode && (
+        <section className="section category-page-category-nav">
+          <div className="category-page-category-heading">
+            <div><p className="eyebrow">Explore categories</p><h2>{mainCategoryName}</h2></div>
+            <span>Select a category to view its services and packages</span>
+          </div>
+          {categoriesState.status === 'loading' && <p className="muted">Loading categories…</p>}
+          {categoriesState.status === 'error' && <p className="error-text">{categoriesState.error}</p>}
+          {categoriesState.status === 'empty' && <p className="muted">No categories are available for this main category.</p>}
+          {categoriesState.status === 'success' && <div className="category-page-category-grid">{categoriesState.items.map((category, index) => {
+            const rawId = category?._id ?? category?.id;
+            const id = String(typeof rawId === 'object' ? (rawId?._id ?? rawId?.id ?? index) : (rawId ?? index));
+            const selected = String(selectedCategoryId) === id;
+            return <button type="button" className={`category-page-category-card${selected ? ' is-selected' : ''}`} key={id} onClick={() => selectCategory(category)}><img src={categoryImage(category, index)} alt={categoryLabel(category)} loading="lazy" /><span>{categoryLabel(category)}</span></button>;
+          })}</div>}
+        </section>
+      )}
       <section className="section category-package-workspace">
         <aside className="category-package-sidebar">
           <p className="eyebrow">{mainCategoryName}</p>
+          {mainCategoryMode && <div className="category-main-picker">
+            <div className="category-package-selector-heading"><b>Select a category</b><span /></div>
+            {categoriesState.status === 'loading' && <p className="muted">Loading categories…</p>}
+            {categoriesState.status === 'error' && <p className="error-text">{categoriesState.error}</p>}
+            {categoriesState.status === 'empty' && <p className="muted">No categories are available.</p>}
+            {categoriesState.status === 'success' && <div className="category-main-picker-grid">{categoriesState.items.map((category, index) => {
+              const rawId = category?._id ?? category?.id;
+              const id = String(typeof rawId === 'object' ? (rawId?._id ?? rawId?.id ?? index) : (rawId ?? index));
+              const selected = String(selectedCategoryId) === id;
+              return <button type="button" className={`category-main-picker-card${selected ? ' is-selected' : ''}`} key={id} onClick={() => selectCategory(category)}><img src={categoryImage(category, index)} alt={categoryLabel(category)} loading="lazy" /><span>{categoryLabel(category)}</span></button>;
+            })}</div>}
+          </div>}
           <h1>{categoryName}</h1>
           <div className="category-packages-rating"><Star size={17} fill="currentColor" /> <b>4.85</b> <span>Curated services</span></div>
           <div className="category-package-selector">

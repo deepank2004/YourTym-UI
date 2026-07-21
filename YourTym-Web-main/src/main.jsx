@@ -108,6 +108,8 @@ useEffect(() => {
       <ServicesPage gender="Women" services={womenServices} {...pageProps} />
     ) : path.startsWith('/men-services') ? (
       <ServicesPage gender="Men" services={menServices} {...pageProps} />
+    ) : path.startsWith('/main-category/') ? (
+      <CategoryPackagesPage {...pageProps} mainCategoryId={decodeURIComponent(path.split('/')[2] || '')} categoryId={decodeURIComponent(path.split('/')[3] || '')} mainCategoryMode />
     ) : path.startsWith('/packages/') ? (
       <CategoryPackagesPage {...pageProps} mainCategoryId={decodeURIComponent(path.split('/')[2] || '')} categoryId={decodeURIComponent(path.split('/')[3] || '')} />
     ) : path === '/packages' ? (
