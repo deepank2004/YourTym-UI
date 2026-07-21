@@ -27,7 +27,7 @@ export function Navbar({ go, totals, mobileOpen, setMobileOpen }) {
     <header className="sticky top-0 z-50 border-b border-neutral-200 bg-white/95 backdrop-blur">
       <nav className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 lg:px-6">
         <Logo onClick={() => go('/')} />
-        <button onClick={() => go('/address')} className="hidden items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium md:flex">
+        <button onClick={() => { window.dispatchEvent(new Event('location-refresh')); go('/address'); }} className="hidden items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium md:flex">
           <MapPin size={17} color={ORANGE} /> {locationLabel} <ChevronDown size={15} />
         </button>
         <form onSubmit={(event) => { event.preventDefault(); if (search.trim()) go(`/women-services?search=${encodeURIComponent(search.trim())}`); }} className="hidden min-w-56 flex-1 items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 md:flex">

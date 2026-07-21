@@ -36,7 +36,12 @@ export function useCartViewModel() {
       return;
     }
     pendingAdds.current.add(item.id);
-    try { if (item.isPackage) await cartService.addPackage(backendId, 1); else await cartService.addService(backendId, 1); } catch (error) { setCartError(error.message || 'Unable to add this item to cart.'); return; } finally { pendingAdds.current.delete(item.id); }
+    try { if (item.isPackage) await cartService.addPackage(backendId, 1); else await cartService.addService(backendId, 1); } catch (error) {
+      const message = error.message || 'Unable to add this item to cart.';
+      setCartError(message);
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') window.alert(message);
+      return;
+    } finally { pendingAdds.current.delete(item.id); }
     setCart((items) => items.some((x) => x.id === item.id) ? items.map((x) => x.id === item.id ? { ...x, qty: x.qty + 1 } : x) : [...items, new CartItem(item, 1)]);
     return true;
   };

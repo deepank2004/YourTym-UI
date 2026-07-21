@@ -40,6 +40,7 @@ export const userEndpoints = Object.freeze({
     mainCategories: adminPath('/mainCategory/allCategory'),
     categoriesByMainCategory: (mainCategoryId) => adminPath(`/Category/allCategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}`),
     subCategoriesByCategory: (mainCategoryId, categoryId) => adminPath(`/SubCategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}/${requiredSegment(categoryId, 'categoryId')}`),
+    servicesBySubCategory: (mainCategoryId, categoryId, subCategoryId) => adminPath(`/Service/${requiredSegment(mainCategoryId, 'mainCategoryId')}/${requiredSegment(categoryId, 'categoryId')}/${requiredSegment(subCategoryId, 'subCategoryId')}`),
     packagesByMainCategory: (mainCategoryId) => adminPath(`/PackagebyMaincategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}`),
     packagesByCategory: (mainCategoryId, categoryId) => adminPath(`/Packagebycategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}/${requiredSegment(categoryId, 'categoryId')}`),
     search: userPath('/Category/search'),

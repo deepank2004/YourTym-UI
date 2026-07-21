@@ -37,6 +37,17 @@ function toCheckoutAddress(address) {
   };
 }
 
+function publishSelectedLocation(address) {
+  const label = [address.city, address.area, address.appartment, address.landMark, address.houseFlat]
+    .filter(Boolean)
+    .map((value) => String(value).trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(', ') || 'Selected location';
+  localStorage.setItem('locationLabel', label);
+  window.dispatchEvent(new CustomEvent('location-updated', { detail: { label } }));
+}
+
 export function AddressPage({ go, setAddress, totals }) {
   const [addresses, setAddresses] = useState([]);
   const [form, setForm] = useState(EMPTY_ADDRESS);
@@ -149,6 +160,7 @@ export function AddressPage({ go, setAddress, totals }) {
     try {
       const result = await attachAddressToCart(address.id);
       setAddress(toCheckoutAddress(address));
+      publishSelectedLocation(address);
       setFeedback({ type: 'success', message: result.message });
     } catch (error) {
       setFeedback({ type: 'error', message: error?.message || 'Unable to select address.' });

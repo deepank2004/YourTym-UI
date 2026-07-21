@@ -3,7 +3,7 @@ import { userEndpoints } from './userEndpoints.js';
 import { mapService, mapPackage } from './homeService.js';
 
 function collection(payload, endpoint) {
-  const values = [payload, payload?.data, payload?.data?.data, payload?.data?.data?.data, payload?.data?.items, payload?.data?.data?.items, payload?.data?.results, payload?.items, payload?.results];
+  const values = [payload, payload?.data, payload?.data?.data, payload?.data?.data?.data, payload?.data?.items, payload?.data?.data?.items, payload?.data?.services, payload?.data?.service, payload?.services, payload?.service, payload?.data?.results, payload?.items, payload?.results];
   const result = values.find(Array.isArray);
   if (!result) throw new Error(`Unexpected response shape from ${endpoint}`);
   return result;
@@ -119,6 +119,18 @@ export async function listSubCategories(mainCategoryId, categoryId) {
   return subCategoryCollection(response.data, endpoint);
 }
 
+export async function listServicesBySubCategory(mainCategoryId, categoryId, subCategoryId) {
+  const endpoint = userEndpoints.catalog.servicesBySubCategory(mainCategoryId, categoryId, subCategoryId);
+  const response = await apiClient.get(endpoint, { params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } });
+  const values = collection(response.data, endpoint);
+  const walk = (item) => {
+    if (!item || typeof item !== 'object') return [];
+    const nested = item.services ?? item.serviceTypes ?? item.items;
+    return Array.isArray(nested) && nested.length ? nested.flatMap(walk) : [item];
+  };
+  return values.flatMap(walk).map((item, index) => mapService(item, index, 'category-service'));
+}
+
 function packageCollection(payload, endpoint) {
   const candidates = [
     payload?.data?.packages,
@@ -156,4 +168,4 @@ export async function listPackagesByMainCategory(mainCategoryId) {
   return packageCollection(response.data, endpoint).map((item, index) => mapPackage(item, index));
 }
 
-export const categoryService = Object.freeze({ listServices, listCategories, listMainCategories, listCategoriesByMainCategory, listSubCategories, listPackagesByCategory, listPackagesByMainCategory });
+export const categoryService = Object.freeze({ listServices, listCategories, listMainCategories, listCategoriesByMainCategory, listSubCategories, listServicesBySubCategory, listPackagesByCategory, listPackagesByMainCategory });

@@ -58,32 +58,48 @@ useEffect(() => {
   useEffect(() => { if ((path === '/login' || path === '/otp' || path === '/signup') && getUserToken() && path === '/login') go(sessionStorage.getItem('authReturnPath') || '/'); }, [path, go]);
   useEffect(() => {
     if (!getUserToken() || !navigator.geolocation) return;
-    if (sessionStorage.getItem('locationPromptShown') && localStorage.getItem('locationLabel') && localStorage.getItem('locationLabel') !== 'Noida, Sector 145') return;
-    sessionStorage.setItem('locationPromptShown', 'true');
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
-      const currentLat = Number(coords.latitude.toFixed(6));
-      const currentLong = Number(coords.longitude.toFixed(6));
-      sessionStorage.setItem('lastLocation', JSON.stringify({ currentLat, currentLong }));
-      let label = `Current location (${currentLat}, ${currentLong})`;
-      try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${currentLat}&lon=${currentLong}&format=json`, { headers: { Accept: 'application/json' } });
-        const place = await response.json();
-        const address = place?.address || {};
-        const cityName = address.city || address.town || address.village || address.municipality;
-        const sectorName = place?.display_name?.match(/Sector\s*[\w-]+/i)?.[0] || address.suburb?.match?.(/Sector\s*[\w-]+/i)?.[0];
-        const areaName = sectorName || address.suburb || address.neighbourhood || address.city_district || address.quarter || address.residential || address.road;
-        label = [cityName, areaName].filter(Boolean).join(', ') || place?.display_name || label;
-      } catch { /* Coordinates remain visible when reverse geocoding is unavailable. */ }
-      localStorage.setItem('locationLabel', label);
-      window.dispatchEvent(new CustomEvent('location-updated', { detail: { label } }));
-      try {
-        const profile = await getProfile();
-        const city = profile.cityId || localStorage.getItem('selectedCityId') || '';
-        await updateLocation({ currentLat, currentLong, city });
-      } catch (error) {
-        console.warn('Unable to update the profile location.', error);
-      }
-    }, () => { localStorage.setItem('locationLabel', 'Location unavailable'); window.dispatchEvent(new CustomEvent('location-updated', { detail: { label: 'Location unavailable' } })); });
+    let requestId = 0;
+    const refreshLocation = () => {
+      const currentRequest = ++requestId;
+      sessionStorage.setItem('locationPromptShown', 'true');
+      navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+        if (currentRequest !== requestId) return;
+        const currentLat = Number(coords.latitude.toFixed(6));
+        const currentLong = Number(coords.longitude.toFixed(6));
+        sessionStorage.setItem('lastLocation', JSON.stringify({ currentLat, currentLong }));
+        let label = `Current location (${currentLat}, ${currentLong})`;
+        try {
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${currentLat}&lon=${currentLong}&format=json`, { headers: { Accept: 'application/json' } });
+          const place = await response.json();
+          const address = place?.address || {};
+          const cityName = address.city || address.town || address.village || address.municipality;
+          const sectorName = place?.display_name?.match(/Sector\s*[\w-]+/i)?.[0] || address.suburb?.match?.(/Sector\s*[\w-]+/i)?.[0];
+          const areaName = sectorName || address.suburb || address.neighbourhood || address.city_district || address.quarter || address.residential || address.road;
+          label = [cityName, areaName].filter(Boolean).join(', ') || place?.display_name || label;
+        } catch { /* Coordinates remain visible when reverse geocoding is unavailable. */ }
+        if (currentRequest !== requestId) return;
+        localStorage.setItem('locationLabel', label);
+        window.dispatchEvent(new CustomEvent('location-updated', { detail: { label } }));
+        try {
+          const profile = await getProfile();
+          const city = profile.cityId || localStorage.getItem('selectedCityId') || '';
+          await updateLocation({ currentLat, currentLong, city });
+        } catch (error) {
+          console.warn('Unable to update the profile location.', error);
+        }
+      }, () => {
+        const label = 'Location unavailable';
+        localStorage.setItem('locationLabel', label);
+        window.dispatchEvent(new CustomEvent('location-updated', { detail: { label } }));
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+    };
+
+    const storedLabel = localStorage.getItem('locationLabel');
+    if (!(sessionStorage.getItem('locationPromptShown') && storedLabel && storedLabel !== 'Noida, Sector 145')) refreshLocation();
+    window.addEventListener('location-refresh', refreshLocation);
+    return () => {
+      window.removeEventListener('location-refresh', refreshLocation);
+    };
   }, [path]);
 
   // Get data from services

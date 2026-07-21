@@ -1,17 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, Clock, PackageCheck, Play, Star } from 'lucide-react';
+import { Check, Clock, PackageCheck, Play, Star } from 'lucide-react';
+import { ServiceCard } from '../components/ServiceCard.jsx';
 import { FormatService } from '../services/FormatService.js';
 import { images } from '../models/constants.js';
 import { categoryService } from '../services/api/categoryService.js';
 import { API_BASE_URL } from '../services/api/apiConfig.js';
-
-function BackButton() {
-  return (
-    <button className="back-button" onClick={() => window.history.back()}>
-      <ArrowLeft size={18} /> Back
-    </button>
-  );
-}
 
 function contextFor(mainCategoryId, categoryId) {
   try {
@@ -39,6 +32,15 @@ function packageImage(pkg, index) {
 
 function categoryLabel(category) {
   return category?.name ?? category?.title ?? category?.categoryName ?? category?.subCategoryName ?? 'Category';
+}
+
+function entityId(entity, fallback = '') {
+  const value = entity?._id ?? entity?.id ?? entity?.serviceId ?? entity?.serviceTypeId ?? fallback;
+  return typeof value === 'object' ? String(value?._id ?? value?.id ?? fallback) : String(value || fallback);
+}
+
+function serviceAnchorId(categoryId, service, index) {
+  return `category-service-${categoryId || 'all'}-${entityId(service, `service-${index}`)}`;
 }
 
 function categoryImage(category, index) {
@@ -151,10 +153,13 @@ function PackageRow({ pkg, index, addItem, anchorId }) {
 export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, categoryId, mainCategoryMode = false }) {
   const [state, setState] = useState({ status: 'loading', packages: [], error: '' });
   const [servicesState, setServicesState] = useState({ status: 'loading', items: [], error: '' });
+  const [servicesResultState, setServicesResultState] = useState({ status: 'empty', items: [], error: '' });
+  const [servicesCatalogueState, setServicesCatalogueState] = useState({ status: mainCategoryMode ? 'loading' : 'empty', groups: [], error: '' });
   const [categoriesState, setCategoriesState] = useState({ status: mainCategoryMode ? 'loading' : 'empty', items: [], error: '' });
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [viewMode, setViewMode] = useState(mainCategoryMode || categoryId ? 'services' : 'packages');
   const [serviceNotice, setServiceNotice] = useState('');
-  const selectedCategoryId = categoryId || (typeof selectedCategory?._id === 'object' ? selectedCategory?._id?._id ?? selectedCategory?._id?.id : selectedCategory?._id) || selectedCategory?.id || '';
+  const selectedCategoryId = entityId(selectedCategory) || String(categoryId || '');
   const routeContext = useMemo(() => contextFor(mainCategoryId, selectedCategoryId), [mainCategoryId, selectedCategoryId]);
   const mainContext = useMemo(() => mainContextFor(mainCategoryId), [mainCategoryId]);
   const selectionMedia = useMemo(() => categoryMedia(selectedCategory), [selectedCategory]);
@@ -167,6 +172,15 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
   }), [mainContext.title, routeContext, selectedCategory, selectionMedia]);
   const categoryName = context.subCategoryName || context.categoryName || 'Selected services';
   const mainCategoryName = context.mainCategoryName || 'YourTym services';
+  const packageRequestKey = mainCategoryMode ? String(mainCategoryId || '') : selectedCategoryId;
+  const selectedServicesGroup = useMemo(
+    () => servicesCatalogueState.groups.find((group) => String(group.id) === String(selectedCategoryId)) || null,
+    [servicesCatalogueState.groups, selectedCategoryId],
+  );
+  const catalogueServiceCount = useMemo(
+    () => servicesCatalogueState.groups.reduce((total, group) => total + group.services.length, 0),
+    [servicesCatalogueState.groups],
+  );
 
   useEffect(() => {
     if (!mainCategoryMode) return undefined;
@@ -188,11 +202,48 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
     return () => { active = false; };
   }, [mainCategoryId, mainCategoryMode, categoryId]);
 
+  useEffect(() => {
+    if (!mainCategoryMode || categoriesState.status !== 'success') return undefined;
+    let active = true;
+    const categories = categoriesState.items;
+    setServicesCatalogueState({ status: 'loading', groups: [], error: '' });
+
+    Promise.all(categories.map(async (category, categoryIndex) => {
+      const id = entityId(category);
+      if (!id) return { id: `invalid-category-${categoryIndex}`, category, subCategories: [], services: [], status: 'error', error: 'This category has no valid backend ID.' };
+      try {
+        const subCategories = await categoryService.listSubCategories(mainCategoryId, id);
+        const serviceGroups = await Promise.all(subCategories.map(async (subCategory) => {
+          const subCategoryId = entityId(subCategory);
+          if (!subCategoryId) return [];
+          return categoryService.listServicesBySubCategory(mainCategoryId, id, subCategoryId);
+        }));
+        const seen = new Set();
+        const services = serviceGroups.flat().filter((service, serviceIndex) => {
+          const serviceId = entityId(service, `${id}-service-${serviceIndex}`);
+          if (seen.has(serviceId)) return false;
+          seen.add(serviceId);
+          return true;
+        });
+        return { id, category, subCategories, services, status: services.length ? 'success' : 'empty', error: '' };
+      } catch (error) {
+        return { id, category, subCategories: [], services: [], status: 'error', error: error.message || `Unable to load services for ${categoryLabel(category)}.` };
+      }
+    })).then((groups) => {
+      if (!active) return;
+      const hasContent = groups.some((group) => group.services.length > 0);
+      const hasErrors = groups.some((group) => group.status === 'error');
+      setServicesCatalogueState({ status: hasContent ? 'success' : (hasErrors ? 'error' : 'empty'), groups, error: hasErrors && !hasContent ? 'Unable to load services for these categories.' : '' });
+    });
+
+    return () => { active = false; };
+  }, [categoriesState.items, categoriesState.status, mainCategoryId, mainCategoryMode]);
+
   const selectCategory = (category) => {
-    const rawId = category?._id ?? category?.id;
-    const nextId = typeof rawId === 'object' ? (rawId?._id ?? rawId?.id) : rawId;
+    const nextId = entityId(category);
     if (!nextId) return;
     setSelectedCategory(category);
+    setViewMode('services');
     setServiceNotice('');
     sessionStorage.setItem('selectedPackageContext', JSON.stringify({
       mainCategoryId: String(mainCategoryId),
@@ -205,8 +256,14 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
   };
 
   useEffect(() => {
+    if (!mainCategoryMode || viewMode !== 'services' || !selectedCategoryId || servicesCatalogueState.status === 'loading') return;
+    const target = document.getElementById(`category-services-${selectedCategoryId}`);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [mainCategoryMode, selectedCategoryId, servicesCatalogueState.status, viewMode]);
+
+  useEffect(() => {
     let active = true;
-    if (!selectedCategoryId) {
+    if (!packageRequestKey) {
       setState({ status: 'empty', packages: [], error: '' });
       return () => { active = false; };
     }
@@ -220,10 +277,75 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
         if (active) setState({ status: 'error', packages: [], error: error.message || 'Unable to load packages for this category.' });
       });
     return () => { active = false; };
-  }, [mainCategoryId, selectedCategoryId]);
+  }, [mainCategoryId, mainCategoryMode, packageRequestKey]);
 
   useEffect(() => {
     let active = true;
+    if (mainCategoryMode) {
+      if (viewMode !== 'services' || !selectedCategoryId) {
+        setServicesResultState({ status: 'empty', items: [], error: '' });
+      } else if (!selectedServicesGroup || servicesCatalogueState.status === 'loading') {
+        setServicesResultState({ status: 'loading', items: [], error: '' });
+      } else {
+        setServicesResultState({ status: selectedServicesGroup.status, items: selectedServicesGroup.services, error: selectedServicesGroup.error });
+      }
+      return () => { active = false; };
+    }
+    if (viewMode !== 'services' || !selectedCategoryId) {
+      setServicesResultState({ status: 'empty', items: [], error: '' });
+      return () => { active = false; };
+    }
+    if (servicesState.status === 'loading') {
+      setServicesResultState({ status: 'loading', items: [], error: '' });
+      return () => { active = false; };
+    }
+    if (servicesState.status === 'error') {
+      setServicesResultState({ status: 'error', items: [], error: servicesState.error });
+      return () => { active = false; };
+    }
+    if (!servicesState.items.length) {
+      setServicesResultState({ status: 'empty', items: [], error: '' });
+      return () => { active = false; };
+    }
+    setServicesResultState({ status: 'loading', items: [], error: '' });
+    Promise.all(servicesState.items.map((subCategory) => {
+      const rawId = subCategory?._id ?? subCategory?.id;
+      const subCategoryId = typeof rawId === 'object' ? (rawId?._id ?? rawId?.id) : rawId;
+      return subCategoryId ? categoryService.listServicesBySubCategory(mainCategoryId, selectedCategoryId, subCategoryId) : [];
+    }))
+      .then((groups) => {
+        if (!active) return;
+        const seen = new Set();
+        const items = groups.flat().filter((service) => {
+          const id = String(service?.id ?? service?.serviceTypeId ?? service?.name ?? '');
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+        setServicesResultState({ status: items.length ? 'success' : 'empty', items, error: '' });
+      })
+      .catch((error) => {
+        if (active) setServicesResultState({ status: 'error', items: [], error: error.message || 'Unable to load services for this category.' });
+      });
+    return () => { active = false; };
+  }, [mainCategoryId, mainCategoryMode, selectedCategoryId, selectedServicesGroup, servicesCatalogueState.status, servicesState, viewMode]);
+
+  useEffect(() => {
+    let active = true;
+    if (mainCategoryMode) {
+      if (!selectedCategoryId || servicesCatalogueState.status === 'loading') {
+        setServicesState({ status: 'loading', items: [], error: '' });
+      } else if (!selectedServicesGroup) {
+        setServicesState({ status: 'empty', items: [], error: '' });
+      } else {
+        setServicesState({
+          status: selectedServicesGroup.subCategories.length ? 'success' : selectedServicesGroup.status,
+          items: selectedServicesGroup.subCategories,
+          error: selectedServicesGroup.error,
+        });
+      }
+      return () => { active = false; };
+    }
     if (!selectedCategoryId) {
       setServicesState({ status: 'empty', items: [], error: '' });
       return () => { active = false; };
@@ -237,11 +359,26 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
         if (active) setServicesState({ status: 'error', items: [], error: error.message || 'Unable to load services for this category.' });
       });
     return () => { active = false; };
-  }, [mainCategoryId, selectedCategoryId]);
+  }, [mainCategoryId, mainCategoryMode, selectedCategoryId, selectedServicesGroup, servicesCatalogueState.status]);
 
   const heroMedia = useMemo(() => mediaFor(context, state.packages), [context, state.packages]);
   const scrollToServicePackage = (service) => {
     setServiceNotice('');
+    if (viewMode === 'services') {
+      const visibleItems = mainCategoryMode ? (selectedServicesGroup?.services ?? []) : servicesResultState.items;
+      const serviceIndex = visibleItems.findIndex((item) => packageMatchesService(item, service));
+      if (serviceIndex < 0) {
+        if (mainCategoryMode && selectedCategoryId) {
+          document.getElementById(`category-services-${selectedCategoryId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+        setServiceNotice(`No service is currently mapped to ${service?.name ?? service?.title ?? 'this category'}.`);
+        return;
+      }
+      const targetId = serviceAnchorId(mainCategoryMode ? selectedCategoryId : '', visibleItems[serviceIndex], serviceIndex);
+      document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     const index = state.packages.findIndex((pkg) => packageMatchesService(pkg, service));
     if (index < 0) {
       setServiceNotice(`No package is currently mapped to ${service?.name ?? service?.title ?? 'this service'}.`);
@@ -253,7 +390,6 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
 
   return (
     <div className="animate-in category-packages-page">
-      <BackButton />
       {mainCategoryMode && (
         <section className="section category-page-category-nav">
           <div className="category-page-category-heading">
@@ -271,29 +407,39 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
           })}</div>}
         </section>
       )}
-      <section className="section category-package-workspace">
+      <section className={`section category-package-workspace${mainCategoryMode ? ' is-main-category' : ''}`}>
         <aside className="category-package-sidebar">
           <p className="eyebrow">{mainCategoryName}</p>
+          <h1>{mainCategoryMode ? mainCategoryName : categoryName}</h1>
+          <div className="category-packages-rating"><Star size={17} fill="currentColor" /> <b>4.85</b> <span>Curated services</span></div>
           {mainCategoryMode && <div className="category-main-picker">
             <div className="category-package-selector-heading"><b>Select a category</b><span /></div>
             {categoriesState.status === 'loading' && <p className="muted">Loading categories…</p>}
             {categoriesState.status === 'error' && <p className="error-text">{categoriesState.error}</p>}
             {categoriesState.status === 'empty' && <p className="muted">No categories are available.</p>}
-            {categoriesState.status === 'success' && <div className="category-main-picker-grid">{categoriesState.items.map((category, index) => {
-              const rawId = category?._id ?? category?.id;
-              const id = String(typeof rawId === 'object' ? (rawId?._id ?? rawId?.id ?? index) : (rawId ?? index));
-              const selected = String(selectedCategoryId) === id;
-              return <button type="button" className={`category-main-picker-card${selected ? ' is-selected' : ''}`} key={id} onClick={() => selectCategory(category)}><img src={categoryImage(category, index)} alt={categoryLabel(category)} loading="lazy" /><span>{categoryLabel(category)}</span></button>;
-            })}</div>}
+            {categoriesState.status === 'success' && <div className="category-main-picker-grid">
+              <button
+                type="button"
+                className={`category-main-picker-card category-main-mode-card${viewMode === 'packages' ? ' is-selected' : ''}`}
+                onClick={() => { setViewMode('packages'); setServiceNotice(''); }}
+              >
+                <img src={images.spaWomen} alt="Packages" loading="lazy" />
+                <span>Packages</span>
+              </button>
+              {categoriesState.items.map((category, index) => {
+                const rawId = category?._id ?? category?.id;
+                const id = String(typeof rawId === 'object' ? (rawId?._id ?? rawId?.id ?? index) : (rawId ?? index));
+                const selected = String(selectedCategoryId) === id;
+                return <button type="button" className={`category-main-picker-card${selected && viewMode === 'services' ? ' is-selected' : ''}`} key={id} onClick={() => selectCategory(category)}><img src={categoryImage(category, index)} alt={categoryLabel(category)} loading="lazy" /><span>{categoryLabel(category)}</span></button>;
+              })}
+            </div>}
           </div>}
-          <h1>{categoryName}</h1>
-          <div className="category-packages-rating"><Star size={17} fill="currentColor" /> <b>4.85</b> <span>Curated services</span></div>
           <div className="category-package-selector">
             <div className="category-package-selector-heading"><b>Select a service</b><span /></div>
             <div className="category-service-options">
               <button type="button" className="category-service-option category-service-option-active" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 <img src={heroMedia.image} alt="" onError={(event) => { event.currentTarget.src = images.hero; }} />
-                <span><b>All services</b><small>{state.status === 'success' ? `${state.packages.length} packages` : 'Packages'}</small></span>
+                <span><b>{viewMode === 'services' ? 'All services' : 'All packages'}</b><small>{viewMode === 'services' ? (servicesResultState.status === 'success' ? `${servicesResultState.items.length} services` : 'Services') : (state.status === 'success' ? `${state.packages.length} packages` : 'Packages')}</small></span>
               </button>
               {servicesState.status === 'loading' && <p className="muted">Loading services…</p>}
               {servicesState.status === 'error' && <p className="error-text">{servicesState.error}</p>}
@@ -301,7 +447,7 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
               {servicesState.status === 'success' && servicesState.items.map((service, index) => (
                 <button type="button" className="category-service-option" key={String(service?._id ?? service?.id ?? `${service?.name ?? 'service'}-${index}`)} onClick={() => scrollToServicePackage(service)}>
                   <img src={packageImage(service, index)} alt="" loading="lazy" />
-                  <span><b>{service?.name ?? service?.title ?? service?.subCategoryName ?? 'Service'}</b><small>View packages</small></span>
+                  <span><b>{service?.name ?? service?.title ?? service?.subCategoryName ?? 'Service'}</b><small>{viewMode === 'services' ? 'View services' : 'View packages'}</small></span>
                 </button>
               ))}
             </div>
@@ -317,15 +463,46 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
           </div>
 
           <div className="category-package-lower">
-            <div className="category-packages-results">
+            <div className={`category-packages-results${viewMode === 'services' ? ' is-services-mode' : ''}${mainCategoryMode ? ' is-main-catalogue' : ''}`}>
               <div className="category-packages-results-heading">
-                <div><p className="eyebrow">{mainCategoryName}</p><h2>Super saver packages</h2></div>
-                {state.status === 'success' && <span>{state.packages.length} packages</span>}
+                <div><p className="eyebrow">{mainCategoryName}</p><h2>{viewMode === 'services' ? (mainCategoryMode ? 'All services' : `${categoryName} services`) : 'Super saver packages'}</h2></div>
+                {viewMode === 'services' && mainCategoryMode && servicesCatalogueState.status === 'success' && <span>{catalogueServiceCount} services</span>}
+                {viewMode === 'services' && !mainCategoryMode && servicesResultState.status === 'success' && <span>{servicesResultState.items.length} services</span>}
+                {viewMode === 'packages' && state.status === 'success' && <span>{state.packages.length} packages</span>}
               </div>
               {state.status === 'loading' && <p className="muted">Loading packages…</p>}
               {state.status === 'error' && <p className="error-text">{state.error}</p>}
               {state.status === 'empty' && <p className="muted">No packages are available for this category yet.</p>}
               {serviceNotice && <p className="category-service-notice">{serviceNotice}</p>}
+              {viewMode === 'services' && mainCategoryMode && <div className="category-service-catalogue">
+                {servicesCatalogueState.status === 'loading' && <p className="muted">Loading services for all categories...</p>}
+                {servicesCatalogueState.status === 'error' && <p className="error-text">{servicesCatalogueState.error}</p>}
+                {servicesCatalogueState.status === 'empty' && <p className="muted">No services are available for this main category yet.</p>}
+                {servicesCatalogueState.groups.map((group) => (
+                  <section className="category-service-section" id={`category-services-${group.id}`} key={group.id}>
+                    <div className="category-service-section-heading">
+                      <div><p className="eyebrow">{mainCategoryName}</p><h3>{categoryLabel(group.category)}</h3></div>
+                      {group.status === 'success' && <span>{group.services.length} services</span>}
+                    </div>
+                    {group.status === 'error' && <p className="error-text">{group.error}</p>}
+                    {group.status === 'empty' && <p className="muted">No services are available in this category yet.</p>}
+                    {group.status === 'success' && <div className="category-service-results-grid">
+                      {group.services.map((service, index) => <ServiceCard key={entityId(service, `${group.id}-service-${index}`)} id={serviceAnchorId(group.id, service, index)} service={service} addItem={addItem} />)}
+                    </div>}
+                  </section>
+                ))}
+              </div>}
+              {viewMode === 'services' && !mainCategoryMode && <div className="category-service-results">
+                {servicesResultState.status === 'loading' && <p className="muted">Loading services...</p>}
+                {servicesResultState.status === 'error' && <p className="error-text">{servicesResultState.error}</p>}
+                {servicesResultState.status === 'empty' && <p className="muted">No services are available for this category yet.</p>}
+                {servicesResultState.status === 'success' && <div className="category-service-results-grid">
+                  {servicesResultState.items.map((service, index) => {
+                    const serviceId = String(service?.id ?? service?.serviceTypeId ?? `service-${index}`);
+                    return <ServiceCard key={serviceId} id={serviceAnchorId('', service, index)} service={service} addItem={addItem} />;
+                  })}
+                </div>}
+              </div>}
               {state.status === 'success' && <div className="category-package-list">{state.packages.map((pkg, index) => <PackageRow key={pkg.id || `package-${index}`} anchorId={`category-package-${pkg.id || index}`} pkg={pkg} index={index} addItem={addItem} />)}</div>}
             </div>
 

@@ -3,9 +3,21 @@ import { Star, Clock } from 'lucide-react';
 import { ORANGE } from '../models/constants.js';
 import { FormatService } from '../services/FormatService.js';
 
-export function ServiceCard({ service, addItem }) {
+function plainText(value) {
+  return String(value ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function ServiceCard({ service, addItem, id }) {
+  const description = plainText(service.description);
   return (
-    <article className="service-card">
+    <article className="service-card" id={id}>
       {service.image ? <img src={service.image} alt={service.name} /> : <div className="image-placeholder" aria-label={`${service.name} image unavailable`} />}
       <div className="p-4">
         <div className="mb-2 flex items-start justify-between gap-3">
@@ -15,7 +27,7 @@ export function ServiceCard({ service, addItem }) {
             4.9
           </span>
         </div>
-        <p>{service.description}</p>
+        {description && <p>{description}</p>}
         <p className="brand">Brands: {service.brand}</p>
         <div className="mt-4 flex items-center justify-between gap-3">
           <div>
