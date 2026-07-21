@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, Check, MapPin, X } from 'lucide-react';
+import { ArrowRight, Check, MapPin, X } from 'lucide-react';
 import { ServiceCard } from '../components/ServiceCard.jsx';
 import { PackageGrid } from '../components/CartComponents.jsx';
 import { OffersStrip, Reviews } from '../components/OffersReviews.jsx';
@@ -81,21 +81,11 @@ export function HomePage({ go, addItem }) {
   const [testimonials, setTestimonials] = useState([]);
   const [activeMainCategory, setActiveMainCategory] = useState(null);
   const [associatedCategories, setAssociatedCategories] = useState(initial());
-  const [activeCategory, setActiveCategory] = useState(null);
-  const [subCategories, setSubCategories] = useState(initial());
   const categoryRequestRef = useRef(0);
 
   const closeCategoryModal = () => {
     categoryRequestRef.current += 1;
     setActiveMainCategory(null);
-    setActiveCategory(null);
-    setSubCategories(initial());
-  };
-
-  const backToCategories = () => {
-    categoryRequestRef.current += 1;
-    setActiveCategory(null);
-    setSubCategories(initial());
   };
 
   const openCategoryModal = async (category) => {
@@ -106,8 +96,6 @@ export function HomePage({ go, addItem }) {
     categoryRequestRef.current = requestId;
     setActiveMainCategory({ id: mainCategoryId ? String(mainCategoryId) : '', title, ...categoryMedia(category) });
     setAssociatedCategories(initial());
-    setActiveCategory(null);
-    setSubCategories(initial());
 
     if (!mainCategoryId) {
       setAssociatedCategories({ status: 'error', items: [], error: 'This category is missing its main-category ID.' });
@@ -126,49 +114,20 @@ export function HomePage({ go, addItem }) {
     }
   };
 
-  const openSubCategoryModal = async (category) => {
-    const mainCategoryId = activeMainCategory?.id ?? mainCategoryIdOf(category);
-    const categoryId = category?._id ?? category?.id;
-    const title = categoryTitle(category);
-    const requestId = categoryRequestRef.current + 1;
-    categoryRequestRef.current = requestId;
-    setActiveCategory({ id: categoryId ? String(categoryId) : '', title, ...categoryMedia(category) });
-    setSubCategories(initial());
-
-    if (!mainCategoryId || !categoryId) {
-      setSubCategories({ status: 'error', items: [], error: 'This category is missing the required IDs.' });
-      return;
-    }
-
-    try {
-      const items = await categoryService.listSubCategories(mainCategoryId, categoryId);
-      if (categoryRequestRef.current === requestId) {
-        setSubCategories({ status: items.length ? 'success' : 'empty', items, error: '' });
-      }
-    } catch (error) {
-      if (categoryRequestRef.current === requestId) {
-        setSubCategories({ status: 'error', items: [], error: error.message || 'Unable to load subcategories.' });
-      }
-    }
-  };
-
-  const openPackagePage = (subCategory) => {
+  const openPackagesForCategory = (category) => {
     const mainCategoryId = activeMainCategory?.id;
-    // The package page fetches the main-category collection. The parent
-    // category and selected subcategory are retained for the page context.
-    const categoryId = activeCategory?.id;
+    const categoryId = category?._id ?? category?.id;
     if (!mainCategoryId || !categoryId) {
-      setSubCategories({ status: 'error', items: [], error: 'This category is missing the IDs required to load packages.' });
+      closeCategoryModal();
       return;
     }
     sessionStorage.setItem('selectedPackageContext', JSON.stringify({
       mainCategoryId: String(mainCategoryId),
       categoryId: String(categoryId),
       mainCategoryName: activeMainCategory?.title ?? 'YourTym',
-      categoryName: activeCategory?.title ?? 'Selected category',
-      subCategoryName: categoryTitle(subCategory),
-      image: categoryMedia(subCategory).image || activeCategory?.image || activeMainCategory?.image || '',
-      video: categoryMedia(subCategory).video || activeCategory?.video || activeMainCategory?.video || '',
+      categoryName: categoryTitle(category),
+      image: categoryMedia(category).image || activeMainCategory?.image || '',
+      video: categoryMedia(category).video || activeMainCategory?.video || '',
     }));
     closeCategoryModal();
     go(`/packages/${encodeURIComponent(mainCategoryId)}/${encodeURIComponent(categoryId)}`);
@@ -247,16 +206,15 @@ export function HomePage({ go, addItem }) {
       <div className="home-category-modal-card" role="dialog" aria-modal="true" aria-labelledby="home-category-modal-title">
         <button className="home-category-modal-close" type="button" aria-label="Close categories" onClick={closeCategoryModal}><X size={27} strokeWidth={2.4} /></button>
         <div className="home-category-modal-heading">
-          {activeCategory && <button type="button" className="home-category-modal-back" onClick={backToCategories}><ArrowLeft size={18} /> Back</button>}
           <p className="eyebrow">Explore categories</p>
-          <h2 id="home-category-modal-title">{activeCategory?.title ?? activeMainCategory.title}</h2>
+          <h2 id="home-category-modal-title">{activeMainCategory.title}</h2>
         </div>
-        <SectionState state={activeCategory ? subCategories : associatedCategories} empty={activeCategory ? 'No subcategories are available for this category.' : 'No categories are available for this main category.'}>
+        <SectionState state={associatedCategories} empty="No categories are available for this main category.">
           <div className="home-associated-grid">
-            {(activeCategory ? subCategories.items : associatedCategories.items).map((category, index) => {
+            {associatedCategories.items.map((category, index) => {
               const title = categoryTitle(category);
               return (
-                <button type="button" className="home-associated-category" key={String(category?._id ?? category?.id ?? `${title}-${index}`)} onClick={() => (activeCategory ? openPackagePage(category) : openSubCategoryModal(category))}>
+                <button type="button" className="home-associated-category" key={String(category?._id ?? category?.id ?? `${title}-${index}`)} onClick={() => openPackagesForCategory(category)}>
                   <span className="home-associated-image"><img src={categoryImage(category, index)} alt={title} /></span>
                   <span>{title}</span>
                 </button>

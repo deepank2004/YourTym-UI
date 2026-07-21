@@ -22,7 +22,7 @@ export function mapService(item, index, prefix = 'service') {
   return { id: idOf(source, index, prefix) !== `${prefix}-${source?.name ?? source?.title ?? index}` ? idOf(source, index, prefix) : idOf(item, index, prefix), serviceTypeId: source?.serviceTypeId ?? item?.serviceTypeId, name: source?.name ?? source?.serviceName ?? source?.title ?? 'Service', description: source?.description ?? source?.mainDescription ?? '', duration: Number(source?.duration ?? source?.serviceDuration ?? source?.timeInMin ?? 0), original: Number(source?.originalPrice ?? source?.mrp ?? source?.price ?? location.originalPrice ?? 0), price: Number(source?.discountPrice ?? source?.sellingPrice ?? source?.discountedPrice ?? source?.discountedPriceWithTax ?? source?.amount ?? source?.price ?? location.discountPrice ?? 0), brand: source?.brand ?? source?.brands ?? '', image: imageOf(source), video: videoOf(source) };
 }
 export function mapPackage(item, index) {
-  return { ...mapService(item, index, 'package'), name: item?.name ?? item?.packageName ?? item?.title ?? 'Package', isPackage: true, packageId: item?._id ?? item?.id ?? item?.packageId };
+  return { ...item, ...mapService(item, index, 'package'), name: item?.name ?? item?.packageName ?? item?.title ?? 'Package', isPackage: true, packageId: item?._id ?? item?.id ?? item?.packageId };
 }
 
 async function get(path) { const response = await apiClient.get(path, { params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } }); return collection(response.data, path); }
