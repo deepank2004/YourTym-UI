@@ -158,7 +158,7 @@ export function HomePage({ go, addItem }) {
     // category and selected subcategory are retained for the page context.
     const categoryId = activeCategory?.id;
     if (!mainCategoryId || !categoryId) {
-      window.alert('This category is missing the IDs required to load packages.');
+      setSubCategories({ status: 'error', items: [], error: 'This category is missing the IDs required to load packages.' });
       return;
     }
     sessionStorage.setItem('selectedPackageContext', JSON.stringify({

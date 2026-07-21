@@ -32,15 +32,6 @@ import { getProfile, updateLocation } from './services/api/profileService.js';
 function App() {
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const showApiAlert = (event) => {
-      const message = event.detail?.message;
-      if (message) window.alert(message);
-    };
-    window.addEventListener('api-error', showApiAlert);
-    return () => window.removeEventListener('api-error', showApiAlert);
-  }, []);
-
 useEffect(() => {
   const timer = setTimeout(() => {
     setLoading(false);
@@ -69,8 +60,6 @@ useEffect(() => {
     if (!getUserToken() || !navigator.geolocation) return;
     if (sessionStorage.getItem('locationPromptShown') && localStorage.getItem('locationLabel') && localStorage.getItem('locationLabel') !== 'Noida, Sector 145') return;
     sessionStorage.setItem('locationPromptShown', 'true');
-    const allow = window.confirm('YourTym would like to access your location to show services available near you. Allow location access?');
-    if (!allow) return;
     navigator.geolocation.getCurrentPosition(async ({ coords }) => {
       const currentLat = Number(coords.latitude.toFixed(6));
       const currentLong = Number(coords.longitude.toFixed(6));
@@ -92,9 +81,9 @@ useEffect(() => {
         const city = profile.cityId || localStorage.getItem('selectedCityId') || '';
         await updateLocation({ currentLat, currentLong, city });
       } catch (error) {
-        if (error?.message) window.alert(error.message);
+        console.warn('Unable to update the profile location.', error);
       }
-    }, () => { localStorage.setItem('locationLabel', 'Location unavailable'); window.dispatchEvent(new CustomEvent('location-updated', { detail: { label: 'Location unavailable' } })); window.alert('Location access was not granted. You can choose your location manually from the navbar.'); });
+    }, () => { localStorage.setItem('locationLabel', 'Location unavailable'); window.dispatchEvent(new CustomEvent('location-updated', { detail: { label: 'Location unavailable' } })); });
   }, [path]);
 
   // Get data from services
