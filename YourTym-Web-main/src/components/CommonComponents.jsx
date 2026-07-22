@@ -6,9 +6,12 @@ import { FormatService } from '../services/FormatService.js';
 export function Logo({ onClick }) {
   const handleClick = onClick || (() => window.dispatchEvent(new CustomEvent('nav-home')));
   return (
-    <button className="logo" onClick={handleClick}>
-      <span>YOUR</span>
-      <b>TYM</b>
+    <button className="logo" onClick={handleClick} aria-label="YourTym home" type="button">
+      <img src="/yourtym-logo.jpeg" alt="YT" />
+      <span className="logo-wordmark" aria-hidden="true">
+        <span className="logo-your">Your</span>
+        <b className="logo-tym">Tym</b>
+      </span>
     </button>
   );
 }

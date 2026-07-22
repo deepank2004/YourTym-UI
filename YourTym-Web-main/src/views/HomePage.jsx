@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, Check, MapPin } from 'lucide-react';
+import { ArrowRight, MapPin } from 'lucide-react';
 import { ServiceCard } from '../components/ServiceCard.jsx';
 import { PackageGrid } from '../components/CartComponents.jsx';
 import { OffersStrip, Reviews } from '../components/OffersReviews.jsx';
@@ -64,8 +64,6 @@ export function HomePage({ go, addItem }) {
     categories: initial(),
     services: initial(),
     packages: initial(),
-    searched: initial(),
-    recommended: initial(),
   });
   const [testimonials, setTestimonials] = useState([]);
   const openMainCategoryPage = (category) => {
@@ -83,8 +81,6 @@ export function HomePage({ go, addItem }) {
       categories: categoryService.listMainCategories,
       services: homeService.services,
       packages: homeService.packages,
-      searched: homeService.mostSearched,
-      recommended: homeService.recommended,
     });
 
     Promise.all(requests.map(async ([key, request]) => {
@@ -111,19 +107,12 @@ export function HomePage({ go, addItem }) {
   }, []);
 
   const services = data.services.items.map((item, index) => mapService(item, index));
-  const recommended = data.recommended.items.map((item, index) => mapService(item, index, 'recommended'));
   const packages = data.packages.items.map(mapPackage);
   const banners = data.banners.items;
   const bannerImage = banners[0]?.image ?? banners[0]?.imageUrl ?? banners[0]?.bannerImage ?? banners[0]?.media?.url;
   const categories = data.categories.items
     .map((item) => item?.category ?? item)
     .filter((item) => item && (item._id || item.id || item.name));
-  const searched = data.searched.items.map((item, index) => (
-    typeof item === 'string'
-      ? { id: `search-${item}`, label: item }
-      : { id: String(item?._id ?? item?.id ?? item?.name ?? index), label: item?.name ?? item?.title ?? item?.serviceName ?? 'Service' }
-  ));
-
   const collageImages = [
     bannerImage || images.hero,
     images.womenSalon,
@@ -148,7 +137,7 @@ export function HomePage({ go, addItem }) {
             <div className="home-card-heading">
               <div>
                 <p className="eyebrow">Explore YourTym</p>
-                <h2>What can we help with?</h2>
+                <h2>Categories</h2>
               </div>
               <button className="home-card-link" onClick={() => go('/packages')}>View all <ArrowRight size={15} /></button>
             </div>
@@ -184,33 +173,10 @@ export function HomePage({ go, addItem }) {
         </div>
       </section>
 
-      <section className="section home-section">
+      <section className="section home-section home-popular-services">
         <SectionTitle title="Popular services near you" action="View all services" onAction={() => go('/women-services')} />
         <SectionState state={{ ...data.services, items: services }}>
           <div className="service-grid">{services.slice(0, 4).map((service) => <ServiceCard key={service.id} service={service} addItem={addItem} />)}</div>
-        </SectionState>
-      </section>
-
-      <section className="section home-discovery-grid">
-        <div className="home-discovery-card">
-          <SectionTitle title="Most searched" />
-          <SectionState state={data.searched} empty="No search trends available.">
-            <div className="home-search-chips">{searched.map((item) => <button className="home-search-chip" key={item.id}>{item.label}</button>)}</div>
-          </SectionState>
-        </div>
-        <aside className="promise-panel home-promise-panel">
-          <p className="eyebrow">The YT promise</p>
-          <h3>Care that feels personal.</h3>
-          <p><Check size={18} /> 4.5+ rated professionals</p>
-          <p><Check size={18} /> Branded products only</p>
-          <p><Check size={18} /> Transparent pricing</p>
-        </aside>
-      </section>
-
-      <section className="section home-section">
-        <SectionTitle title="Recommended services" />
-        <SectionState state={{ ...data.recommended, items: recommended }}>
-          <div className="service-grid">{recommended.slice(0, 4).map((service) => <ServiceCard key={service.id} service={service} addItem={addItem} />)}</div>
         </SectionState>
       </section>
 

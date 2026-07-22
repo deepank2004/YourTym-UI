@@ -16,16 +16,13 @@ export function Navbar({ go, totals, mobileOpen, setMobileOpen }) {
 
   const links = [
     ['Home', '/'],
-    ['Women Services', '/women-services'],
-    ['Men Services', '/men-services'],
-    ['Packages', '/packages'],
     ['Offers', '/offers'],
     ['Booking History', '/booking-history'],
   ];
 
   return (
     <header className="sticky top-0 z-50 border-b border-neutral-200 bg-white/95 backdrop-blur">
-      <nav className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 lg:px-6">
+      <nav className="yourtym-nav mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 lg:px-6">
         <Logo onClick={() => go('/')} />
         <button onClick={() => { window.dispatchEvent(new Event('location-refresh')); go('/address'); }} className="hidden items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium md:flex">
           <MapPin size={17} color={ORANGE} /> {locationLabel} <ChevronDown size={15} />

@@ -101,6 +101,30 @@ function normalizeText(value) {
   return String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function uniqueEntities(items, keyForItem) {
+  const seen = new Set();
+  return items.filter((item, index) => {
+    const key = keyForItem(item, index);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function categoryIdentity(category, index) {
+  const name = normalizeText(categoryLabel(category));
+  if (name) return `name:${name}`;
+  const id = entityId(category);
+  return id ? `id:${id}` : `category:${index}`;
+}
+
+function serviceIdentity(service, index) {
+  const name = normalizeText(service?.name ?? service?.serviceName ?? service?.title);
+  if (name) return `service:${name}`;
+  const id = entityId(service);
+  return id ? `id:${id}` : `service:${index}`;
+}
+
 function packageMatchesService(pkg, service) {
   const idValue = (value) => typeof value === 'object' ? (value?._id ?? value?.id ?? '') : value;
   const serviceId = String(idValue(service?._id ?? service?.id) || '');
@@ -173,13 +197,32 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
   const categoryName = context.subCategoryName || context.categoryName || 'Selected services';
   const mainCategoryName = context.mainCategoryName || 'YourTym services';
   const packageRequestKey = mainCategoryMode ? String(mainCategoryId || '') : selectedCategoryId;
+  const catalogueGroups = useMemo(() => {
+    const groups = servicesCatalogueState.groups || [];
+    const selectedId = String(selectedCategoryId || '');
+    const orderedGroups = selectedId
+      ? [...groups].sort((left, right) => (String(left.id) === selectedId ? -1 : String(right.id) === selectedId ? 1 : 0))
+      : groups;
+    const seenServices = new Set();
+    return orderedGroups
+      .map((group) => {
+        const services = uniqueEntities(group.services || [], serviceIdentity).filter((service, index) => {
+          const key = serviceIdentity(service, index);
+          if (seenServices.has(key)) return false;
+          seenServices.add(key);
+          return true;
+        });
+        return { ...group, services };
+      })
+      .filter((group) => group.status !== 'success' || group.services.length || String(group.id) === selectedId);
+  }, [servicesCatalogueState.groups, selectedCategoryId]);
   const selectedServicesGroup = useMemo(
-    () => servicesCatalogueState.groups.find((group) => String(group.id) === String(selectedCategoryId)) || null,
-    [servicesCatalogueState.groups, selectedCategoryId],
+    () => catalogueGroups.find((group) => String(group.id) === String(selectedCategoryId)) || null,
+    [catalogueGroups, selectedCategoryId],
   );
   const catalogueServiceCount = useMemo(
-    () => servicesCatalogueState.groups.reduce((total, group) => total + group.services.length, 0),
-    [servicesCatalogueState.groups],
+    () => catalogueGroups.reduce((total, group) => total + group.services.length, 0),
+    [catalogueGroups],
   );
 
   useEffect(() => {
@@ -189,12 +232,13 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
     categoryService.listCategoriesByMainCategory(mainCategoryId)
       .then((items) => {
         if (!active) return;
-        setCategoriesState({ status: items.length ? 'success' : 'empty', items, error: '' });
-        setSelectedCategory((current) => current || items.find((item) => {
+        const uniqueItems = uniqueEntities(items, categoryIdentity);
+        setCategoriesState({ status: uniqueItems.length ? 'success' : 'empty', items: uniqueItems, error: '' });
+        setSelectedCategory((current) => current || uniqueItems.find((item) => {
           const rawId = item?._id ?? item?.id;
           const id = typeof rawId === 'object' ? (rawId?._id ?? rawId?.id) : rawId;
           return String(id || '') === String(categoryId || '');
-        }) || items[0] || null);
+        }) || uniqueItems[0] || null);
       })
       .catch((error) => {
         if (active) setCategoriesState({ status: 'error', items: [], error: error.message || 'Unable to load categories for this main category.' });
@@ -212,19 +256,16 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
       const id = entityId(category);
       if (!id) return { id: `invalid-category-${categoryIndex}`, category, subCategories: [], services: [], status: 'error', error: 'This category has no valid backend ID.' };
       try {
-        const subCategories = await categoryService.listSubCategories(mainCategoryId, id);
+        const subCategories = uniqueEntities(
+          await categoryService.listSubCategories(mainCategoryId, id),
+          (subCategory, index) => categoryIdentity(subCategory, index),
+        );
         const serviceGroups = await Promise.all(subCategories.map(async (subCategory) => {
           const subCategoryId = entityId(subCategory);
           if (!subCategoryId) return [];
           return categoryService.listServicesBySubCategory(mainCategoryId, id, subCategoryId);
         }));
-        const seen = new Set();
-        const services = serviceGroups.flat().filter((service, serviceIndex) => {
-          const serviceId = entityId(service, `${id}-service-${serviceIndex}`);
-          if (seen.has(serviceId)) return false;
-          seen.add(serviceId);
-          return true;
-        });
+        const services = uniqueEntities(serviceGroups.flat(), serviceIdentity);
         return { id, category, subCategories, services, status: services.length ? 'success' : 'empty', error: '' };
       } catch (error) {
         return { id, category, subCategories: [], services: [], status: 'error', error: error.message || `Unable to load services for ${categoryLabel(category)}.` };
@@ -315,13 +356,7 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
     }))
       .then((groups) => {
         if (!active) return;
-        const seen = new Set();
-        const items = groups.flat().filter((service) => {
-          const id = String(service?.id ?? service?.serviceTypeId ?? service?.name ?? '');
-          if (seen.has(id)) return false;
-          seen.add(id);
-          return true;
-        });
+        const items = uniqueEntities(groups.flat(), serviceIdentity);
         setServicesResultState({ status: items.length ? 'success' : 'empty', items, error: '' });
       })
       .catch((error) => {
@@ -376,7 +411,7 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
         return;
       }
       const targetId = serviceAnchorId(mainCategoryMode ? selectedCategoryId : '', visibleItems[serviceIndex], serviceIndex);
-      document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
     const index = state.packages.findIndex((pkg) => packageMatchesService(pkg, service));
@@ -385,7 +420,7 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
       return;
     }
     const target = document.getElementById(`category-package-${state.packages[index].id || index}`);
-    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   return (
@@ -478,7 +513,7 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
                 {servicesCatalogueState.status === 'loading' && <p className="muted">Loading services for all categories...</p>}
                 {servicesCatalogueState.status === 'error' && <p className="error-text">{servicesCatalogueState.error}</p>}
                 {servicesCatalogueState.status === 'empty' && <p className="muted">No services are available for this main category yet.</p>}
-                {servicesCatalogueState.groups.map((group) => (
+                {catalogueGroups.map((group) => (
                   <section className="category-service-section" id={`category-services-${group.id}`} key={group.id}>
                     <div className="category-service-section-heading">
                       <div><p className="eyebrow">{mainCategoryName}</p><h3>{categoryLabel(group.category)}</h3></div>
@@ -507,7 +542,6 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
             </div>
 
             <aside className="category-packages-right-rail">
-              <div className="category-offer-card"><span className="category-offer-badge">%</span><div><b>Great value packages</b><p>Save more on your next booking</p></div></div>
               <div className="promise-panel"><p className="eyebrow">YourTym promise</p><h3>Care you can count on.</h3><p><Check size={18} /> 4.5+ rated professionals</p><p><Check size={18} /> Branded products only</p><p><Check size={18} /> Transparent pricing</p></div>
               <div className="category-cart-teaser"><b>{cart.length ? `${cart.length} item${cart.length > 1 ? 's' : ''} in your cart` : 'No items in your cart'}</b><button type="button" className="outline-button small" onClick={() => go('/cart')}>View cart</button></div>
             </aside>
