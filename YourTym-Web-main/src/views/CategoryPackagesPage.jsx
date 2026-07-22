@@ -174,6 +174,19 @@ function PackageRow({ pkg, index, addItem, anchorId }) {
   );
 }
 
+function SubCategoryRow({ subCategory, index, selected, onSelect }) {
+  const name = categoryLabel(subCategory);
+  return (
+    <button type="button" className={`service-card category-subcategory-row${selected ? ' is-selected' : ''}`} onClick={onSelect}>
+      <img src={categoryImage(subCategory, index)} alt={name} loading="lazy" decoding="async" />
+      <div className="p-4">
+        <div className="mb-2 flex items-start justify-between gap-3"><h3>{name}</h3></div>
+        <p>View services</p>
+      </div>
+    </button>
+  );
+}
+
 export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, categoryId, mainCategoryMode = false }) {
   const [state, setState] = useState({ status: 'loading', packages: [], error: '' });
   const [servicesState, setServicesState] = useState({ status: 'loading', items: [], error: '' });
@@ -181,6 +194,7 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
   const [servicesCatalogueState, setServicesCatalogueState] = useState({ status: mainCategoryMode ? 'loading' : 'empty', groups: [], error: '' });
   const [categoriesState, setCategoriesState] = useState({ status: mainCategoryMode ? 'loading' : 'empty', items: [], error: '' });
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedSubCategoryId, setSelectedSubCategoryId] = useState('');
   const [viewMode, setViewMode] = useState(mainCategoryMode || categoryId ? 'services' : 'packages');
   const [serviceNotice, setServiceNotice] = useState('');
   const selectedCategoryId = entityId(selectedCategory) || String(categoryId || '');
@@ -254,7 +268,7 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
 
     Promise.all(categories.map(async (category, categoryIndex) => {
       const id = entityId(category);
-      if (!id) return { id: `invalid-category-${categoryIndex}`, category, subCategories: [], services: [], status: 'error', error: 'This category has no valid backend ID.' };
+      if (!id) return { id: `invalid-category-${categoryIndex}`, category, subCategories: [], subCategoryServices: [], services: [], status: 'error', error: 'This category has no valid backend ID.' };
       try {
         const subCategories = uniqueEntities(
           await categoryService.listSubCategories(mainCategoryId, id),
@@ -262,13 +276,20 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
         );
         const serviceGroups = await Promise.all(subCategories.map(async (subCategory) => {
           const subCategoryId = entityId(subCategory);
-          if (!subCategoryId) return [];
-          return categoryService.listServicesBySubCategory(mainCategoryId, id, subCategoryId);
+          if (!subCategoryId) return { id: '', subCategory, services: [] };
+          return {
+            id: subCategoryId,
+            subCategory,
+            services: uniqueEntities(
+              await categoryService.listServicesBySubCategory(mainCategoryId, id, subCategoryId),
+              serviceIdentity,
+            ),
+          };
         }));
-        const services = uniqueEntities(serviceGroups.flat(), serviceIdentity);
-        return { id, category, subCategories, services, status: services.length ? 'success' : 'empty', error: '' };
+        const services = uniqueEntities(serviceGroups.flatMap((group) => group.services), serviceIdentity);
+        return { id, category, subCategories, subCategoryServices: serviceGroups, services, status: services.length ? 'success' : 'empty', error: '' };
       } catch (error) {
-        return { id, category, subCategories: [], services: [], status: 'error', error: error.message || `Unable to load services for ${categoryLabel(category)}.` };
+        return { id, category, subCategories: [], subCategoryServices: [], services: [], status: 'error', error: error.message || `Unable to load services for ${categoryLabel(category)}.` };
       }
     })).then((groups) => {
       if (!active) return;
@@ -284,6 +305,7 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
     const nextId = entityId(category);
     if (!nextId) return;
     setSelectedCategory(category);
+    setSelectedSubCategoryId('');
     setViewMode('services');
     setServiceNotice('');
     sessionStorage.setItem('selectedPackageContext', JSON.stringify({
@@ -295,6 +317,19 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
     }));
     if (mainCategoryMode) window.history.replaceState({}, '', `/main-category/${encodeURIComponent(mainCategoryId)}/${encodeURIComponent(nextId)}`);
   };
+
+  const selectSubCategory = (group, subCategory) => {
+    const id = entityId(subCategory);
+    if (!id) return;
+    setSelectedCategory(group.category);
+    setSelectedSubCategoryId(id);
+    setServiceNotice('');
+  };
+
+  useEffect(() => {
+    if (!mainCategoryMode || !selectedSubCategoryId || servicesCatalogueState.status === 'loading') return;
+    document.getElementById(`category-subcategory-services-${selectedCategoryId}-${selectedSubCategoryId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [mainCategoryMode, selectedCategoryId, selectedSubCategoryId, servicesCatalogueState.status]);
 
   useEffect(() => {
     if (!mainCategoryMode || viewMode !== 'services' || !selectedCategoryId || servicesCatalogueState.status === 'loading') return;
@@ -500,8 +535,8 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
           <div className="category-package-lower">
             <div className={`category-packages-results${viewMode === 'services' ? ' is-services-mode' : ''}${mainCategoryMode ? ' is-main-catalogue' : ''}`}>
               <div className="category-packages-results-heading">
-                <div><p className="eyebrow">{mainCategoryName}</p><h2>{viewMode === 'services' ? (mainCategoryMode ? 'All services' : `${categoryName} services`) : 'Super saver packages'}</h2></div>
-                {viewMode === 'services' && mainCategoryMode && servicesCatalogueState.status === 'success' && <span>{catalogueServiceCount} services</span>}
+                <div><p className="eyebrow">{mainCategoryName}</p><h2>{viewMode === 'services' ? (mainCategoryMode ? (selectedSubCategoryId ? 'Services' : 'Subcategories') : `${categoryName} services`) : 'Super saver packages'}</h2></div>
+                {viewMode === 'services' && mainCategoryMode && servicesCatalogueState.status === 'success' && <span>{selectedSubCategoryId ? `${catalogueServiceCount} services` : `${catalogueGroups.reduce((total, group) => total + group.subCategories.length, 0)} subcategories`}</span>}
                 {viewMode === 'services' && !mainCategoryMode && servicesResultState.status === 'success' && <span>{servicesResultState.items.length} services</span>}
                 {viewMode === 'packages' && state.status === 'success' && <span>{state.packages.length} packages</span>}
               </div>
@@ -510,22 +545,32 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
               {state.status === 'empty' && <p className="muted">No packages are available for this category yet.</p>}
               {serviceNotice && <p className="category-service-notice">{serviceNotice}</p>}
               {viewMode === 'services' && mainCategoryMode && <div className="category-service-catalogue">
-                {servicesCatalogueState.status === 'loading' && <p className="muted">Loading services for all categories...</p>}
+                {servicesCatalogueState.status === 'loading' && <p className="muted">Loading subcategories...</p>}
                 {servicesCatalogueState.status === 'error' && <p className="error-text">{servicesCatalogueState.error}</p>}
-                {servicesCatalogueState.status === 'empty' && <p className="muted">No services are available for this main category yet.</p>}
-                {catalogueGroups.map((group) => (
-                  <section className="category-service-section" id={`category-services-${group.id}`} key={group.id}>
-                    <div className="category-service-section-heading">
-                      <div><p className="eyebrow">{mainCategoryName}</p><h3>{categoryLabel(group.category)}</h3></div>
-                      {group.status === 'success' && <span>{group.services.length} services</span>}
-                    </div>
-                    {group.status === 'error' && <p className="error-text">{group.error}</p>}
-                    {group.status === 'empty' && <p className="muted">No services are available in this category yet.</p>}
-                    {group.status === 'success' && <div className="category-service-results-grid">
-                      {group.services.map((service, index) => <ServiceCard key={entityId(service, `${group.id}-service-${index}`)} id={serviceAnchorId(group.id, service, index)} service={service} addItem={addItem} />)}
-                    </div>}
-                  </section>
-                ))}
+                {servicesCatalogueState.status === 'empty' && !catalogueGroups.some((group) => group.subCategories.length) && <p className="muted">No subcategories are available for this main category yet.</p>}
+                {catalogueGroups.map((group) => {
+                  const isSelectedGroup = String(group.id) === String(selectedCategoryId);
+                  const selectedSubCategory = group.subCategories.find((subCategory) => String(entityId(subCategory)) === String(selectedSubCategoryId));
+                  const selectedSubCategoryServices = group.subCategoryServices?.find((entry) => String(entry.id) === String(selectedSubCategoryId))?.services ?? [];
+                  const showSubCategoryServices = isSelectedGroup && Boolean(selectedSubCategory);
+                  return (
+                    <section className="category-service-section" id={`category-services-${group.id}`} key={group.id}>
+                      <div className="category-service-section-heading">
+                        <div><p className="eyebrow">{mainCategoryName}</p><h3>{categoryLabel(group.category)}</h3></div>
+                        <span>{showSubCategoryServices ? `${selectedSubCategoryServices.length} services` : `${group.subCategories.length} subcategories`}</span>
+                      </div>
+                      {group.status === 'error' && <p className="error-text">{group.error}</p>}
+                      {!showSubCategoryServices && group.subCategories.length > 0 && <div className="category-service-results-grid category-subcategory-results">
+                        {group.subCategories.map((subCategory, index) => <SubCategoryRow key={entityId(subCategory, `${group.id}-subcategory-${index}`)} subCategory={subCategory} index={index} selected={String(entityId(subCategory)) === String(selectedSubCategoryId)} onSelect={() => selectSubCategory(group, subCategory)} />)}
+                      </div>}
+                      {showSubCategoryServices && <div className="category-service-results-grid" id={`category-subcategory-services-${selectedCategoryId}-${selectedSubCategoryId}`}>
+                        <button type="button" className="secondary-button small category-subcategory-back" onClick={() => setSelectedSubCategoryId('')}>Back to subcategories</button>
+                        {selectedSubCategoryServices.map((service, index) => <ServiceCard key={entityId(service, `${group.id}-service-${index}`)} id={serviceAnchorId(group.id, service, index)} service={service} addItem={addItem} />)}
+                      </div>}
+                      {!showSubCategoryServices && group.subCategories.length === 0 && group.status !== 'error' && <p className="muted">No subcategories are available in this category yet.</p>}
+                    </section>
+                  );
+                })}
               </div>}
               {viewMode === 'services' && !mainCategoryMode && <div className="category-service-results">
                 {servicesResultState.status === 'loading' && <p className="muted">Loading services...</p>}
