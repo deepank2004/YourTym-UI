@@ -4,6 +4,7 @@ import { ServiceCard } from '../components/ServiceCard.jsx';
 import { FormatService } from '../services/FormatService.js';
 import { images } from '../models/constants.js';
 import { categoryService } from '../services/api/categoryService.js';
+import { groupPackageServices } from '../services/api/homeService.js';
 import { API_BASE_URL } from '../services/api/apiConfig.js';
 
 function contextFor(mainCategoryId, categoryId) {
@@ -151,24 +152,40 @@ function packageMatchesService(pkg, service) {
   }
 }
 
-function PackageRow({ pkg, index, addItem, anchorId }) {
+function PackageRow({ pkg, index, addItem, anchorId, onEdit }) {
+  const [adding, setAdding] = useState(false);
+  const allIncludedServices = groupPackageServices(pkg.includedServices);
+  const includedServices = allIncludedServices.slice(0, 4);
+  const handleAdd = async () => {
+    if (adding) return;
+    setAdding(true);
+    try { await addItem(pkg); } finally { setAdding(false); }
+  };
   return (
     <article className="category-package-row" id={anchorId}>
       <div className="category-package-row-copy">
         <div className="label"><PackageCheck size={14} /> PACKAGE</div>
         <h3>{pkg.name}</h3>
-        <div className="category-package-rating"><Star size={15} fill="currentColor" /> 4.9 <span>(Highly rated)</span></div>
+        <div className="category-package-rating"><Star size={15} fill="currentColor" /> {Number(pkg.rating || 4.9).toFixed(1)} <span>{pkg.sellCount ? `(${Number(pkg.sellCount).toLocaleString('en-IN')} bookings)` : '(Highly rated)'}</span></div>
         <div className="category-package-price">
-          <b>{FormatService.formatPrice(pkg.price)}</b>
-          {pkg.original > pkg.price && <s>{FormatService.formatPrice(pkg.original)}</s>}
+          <b>{pkg.hasPrice === false ? 'Price at checkout' : FormatService.formatPrice(pkg.price)}</b>
+          {pkg.hasPrice !== false && pkg.original > pkg.price && <s>{FormatService.formatPrice(pkg.original)}</s>}
           <span>•</span><Clock size={15} /> {pkg.duration || 0} min
         </div>
-        {pkg.description && <p>{pkg.description}</p>}
-        <button className="secondary-button small" type="button" onClick={() => addItem(pkg)}>Add to cart</button>
+        {includedServices.length > 0 && <ul className="category-package-included-list">
+          {includedServices.map((service, serviceIndex) => <li key={service.id || `${pkg.id}-included-${serviceIndex}`}>
+            <span><b>{service.subCategory || service.category || 'Service'}:</b> {service.name}</span>
+          </li>)}
+          {allIncludedServices.length > includedServices.length && <li className="category-package-more-services">+{allIncludedServices.length - includedServices.length} more services</li>}
+        </ul>}
+        <div className="category-package-actions">
+          {pkg.isEditable && <button className="outline-button small" type="button" onClick={() => onEdit?.(pkg)}>Edit your package</button>}
+          <button className="add-button small" type="button" onClick={handleAdd} disabled={adding}>{adding ? 'Adding…' : 'Add'}</button>
+        </div>
       </div>
       <div className="category-package-row-media">
         <img src={packageImage(pkg, index)} alt={pkg.name} loading="lazy" decoding="async" />
-        {pkg.original > pkg.price && <span>{Math.max(1, Math.round((1 - (pkg.price / pkg.original)) * 100))}% OFF</span>}
+        {pkg.hasPrice !== false && pkg.original > pkg.price && <span>{Math.max(1, Math.round((1 - (pkg.price / pkg.original)) * 100))}% OFF</span>}
       </div>
     </article>
   );
@@ -210,6 +227,10 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
   }), [mainContext.title, routeContext, selectedCategory, selectionMedia]);
   const categoryName = context.subCategoryName || context.categoryName || 'Selected services';
   const mainCategoryName = context.mainCategoryName || 'YourTym services';
+  const openPackageEditor = (pkg) => {
+    try { sessionStorage.setItem('selectedPackageForEdit', JSON.stringify(pkg)); } catch { /* session storage is optional */ }
+    go('/edit-package');
+  };
   const packageRequestKey = mainCategoryMode ? String(mainCategoryId || '') : selectedCategoryId;
   const catalogueGroups = useMemo(() => {
     const groups = servicesCatalogueState.groups || [];
@@ -324,6 +345,16 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
     setSelectedCategory(group.category);
     setSelectedSubCategoryId(id);
     setServiceNotice('');
+  };
+
+  const scrollToMainPackages = () => {
+    if (!mainCategoryMode) return;
+    setViewMode('services');
+    setSelectedSubCategoryId('');
+    setServiceNotice('');
+    window.setTimeout(() => {
+      document.getElementById('category-main-packages')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   };
 
   useEffect(() => {
@@ -490,8 +521,8 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
             {categoriesState.status === 'success' && <div className="category-main-picker-grid">
               <button
                 type="button"
-                className={`category-main-picker-card category-main-mode-card${viewMode === 'packages' ? ' is-selected' : ''}`}
-                onClick={() => { setViewMode('packages'); setServiceNotice(''); }}
+                className="category-main-picker-card category-main-mode-card"
+                onClick={scrollToMainPackages}
               >
                 <img src={images.spaWomen} alt="Packages" loading="lazy" />
                 <span>Packages</span>
@@ -544,6 +575,18 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
               {state.status === 'error' && <p className="error-text">{state.error}</p>}
               {state.status === 'empty' && <p className="muted">No packages are available for this category yet.</p>}
               {serviceNotice && <p className="category-service-notice">{serviceNotice}</p>}
+              {mainCategoryMode && <section className="category-main-packages-section" id="category-main-packages">
+                <div className="category-service-section-heading">
+                  <div><p className="eyebrow">{mainCategoryName}</p><h3>Packages</h3></div>
+                  {state.status === 'success' && <span>{state.packages.length} packages</span>}
+                </div>
+                {state.status === 'loading' && <p className="muted">Loading packages...</p>}
+                {state.status === 'error' && <p className="error-text">{state.error}</p>}
+                {state.status === 'empty' && <p className="muted">No packages are available for this main category yet.</p>}
+                {state.status === 'success' && <div className="category-package-list category-main-package-list">
+                  {state.packages.map((pkg, index) => <PackageRow key={pkg.id || `main-package-${index}`} anchorId={`category-package-${pkg.id || index}`} pkg={pkg} index={index} addItem={addItem} onEdit={openPackageEditor} />)}
+                </div>}
+              </section>}
               {viewMode === 'services' && mainCategoryMode && <div className="category-service-catalogue">
                 {servicesCatalogueState.status === 'loading' && <p className="muted">Loading subcategories...</p>}
                 {servicesCatalogueState.status === 'error' && <p className="error-text">{servicesCatalogueState.error}</p>}
@@ -583,7 +626,7 @@ export function CategoryPackagesPage({ go, addItem, cart = [], mainCategoryId, c
                   })}
                 </div>}
               </div>}
-              {state.status === 'success' && <div className="category-package-list">{state.packages.map((pkg, index) => <PackageRow key={pkg.id || `package-${index}`} anchorId={`category-package-${pkg.id || index}`} pkg={pkg} index={index} addItem={addItem} />)}</div>}
+              {state.status === 'success' && !mainCategoryMode && <div className="category-package-list">{state.packages.map((pkg, index) => <PackageRow key={pkg.id || `package-${index}`} anchorId={`category-package-${pkg.id || index}`} pkg={pkg} index={index} addItem={addItem} onEdit={openPackageEditor} />)}</div>}
             </div>
 
             <aside className="category-packages-right-rail">

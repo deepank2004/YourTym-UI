@@ -159,6 +159,7 @@ export function LoginPage({ go, step = 'phone' }) {
       });
 
       setUserToken(result.token);
+      window.dispatchEvent(new Event('auth-changed'));
       clearPendingLogin();
       let existingProfile = false;
       if (!result.isNewUser && !pending.isRegistered) {
@@ -254,7 +255,10 @@ export function LoginPage({ go, step = 'phone' }) {
         refferalCode,
       });
 
-      if (result.token) setUserToken(result.token);
+      if (result.token) {
+        setUserToken(result.token);
+        window.dispatchEvent(new Event('auth-changed'));
+      }
       clearPendingLogin();
       const destination = sessionStorage.getItem('authReturnPath') || '/';
       sessionStorage.removeItem('authReturnPath');

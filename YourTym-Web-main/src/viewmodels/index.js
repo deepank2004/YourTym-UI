@@ -3,6 +3,7 @@ import { CartItem, User } from '../models/index.js';
 import { ServiceDataService } from '../services/ServiceDataService.js';
 import { FormatService } from '../services/FormatService.js';
 import { cartService } from '../services/api/cartService.js';
+import { getUserToken } from '../services/api/tokenStorage.js';
 
 export function useNavigationViewModel() {
   const [path, setPath] = useState(window.location.pathname);
@@ -26,9 +27,44 @@ export function useCartViewModel() {
   const [cart, setCart] = useState([]);
   const pendingAdds = useRef(new Set());
   const [cartError, setCartError] = useState('');
-    useEffect(() => { let active = true; cartService.get().then((result) => { const items = result?.items ?? result?.cartItems ?? [...(result?.services ?? []), ...(result?.packages ?? [])]; if (active && Array.isArray(items)) setCart(items.map((item) => { const nested = item.service ?? item.serviceId ?? item.Services ?? item.package ?? item.packageId ?? item.Package ?? item.serviceDetails ?? item.packageDetails ?? {}; const updateField = item.Services ? 'Services' : item.AddOnServices ? 'AddOnServices' : item.packageServices ? 'packageServices' : item.Package || item.package ? 'packageId' : 'AddOnServices'; const backendId = (typeof item.serviceId === 'object' ? item.serviceId?._id : item.serviceId) ?? (typeof item.packageId === 'object' ? item.packageId?._id : item.packageId) ?? (typeof item[updateField] === 'string' ? item[updateField] : null) ?? nested._id ?? nested.id ?? item._id ?? item.id; const isPackage = Boolean(item.packageId ?? item.package ?? item.Package ?? item.packageServices); const rawPrice = item.price ?? item.discountPrice ?? item.sellingPrice ?? item.amount ?? nested.discountPrice ?? nested.sellingPrice ?? nested.price ?? nested.location?.[0]?.discountPrice ?? 0; return { ...item, id: item.cartItemId ?? item.id ?? item._id ?? backendId, backendId, updateField, isPackage, qty: Number(item.qty ?? item.quantity ?? 1), name: item.name ?? item.serviceName ?? item.packageName ?? nested.name ?? nested.serviceName ?? nested.packageName ?? nested.title ?? 'Service', duration: Number(item.duration ?? item.timeInMin ?? nested.duration ?? nested.timeInMin ?? 0), price: Number(rawPrice) || 0 }; })); }).catch((error) => { if (active) setCartError(error.message); }); return () => { active = false; }; }, []);
+  const [authVersion, setAuthVersion] = useState(0);
+
+  useEffect(() => {
+    const syncAuthentication = () => setAuthVersion((version) => version + 1);
+    window.addEventListener('auth-changed', syncAuthentication);
+    return () => window.removeEventListener('auth-changed', syncAuthentication);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!getUserToken()) {
+      setCart([]);
+      setCartError('');
+      return () => { active = false; };
+    }
+    cartService.get().then((result) => {
+      const items = result?.items ?? result?.cartItems ?? [...(result?.services ?? []), ...(result?.packages ?? [])];
+      if (active && Array.isArray(items)) setCart(items.map((item) => {
+        const nested = item.service ?? item.serviceId ?? item.Services ?? item.package ?? item.packageId ?? item.Package ?? item.serviceDetails ?? item.packageDetails ?? {};
+        const updateField = item.Services ? 'Services' : item.AddOnServices ? 'AddOnServices' : item.packageServices ? 'packageServices' : item.Package || item.package ? 'packageId' : 'AddOnServices';
+        const backendId = (typeof item.serviceId === 'object' ? item.serviceId?._id : item.serviceId) ?? (typeof item.packageId === 'object' ? item.packageId?._id : item.packageId) ?? (typeof item[updateField] === 'string' ? item[updateField] : null) ?? nested._id ?? nested.id ?? item._id ?? item.id;
+        const isPackage = Boolean(item.packageId ?? item.package ?? item.Package ?? item.packageServices);
+        const rawPrice = item.price ?? item.discountPrice ?? item.sellingPrice ?? item.amount ?? nested.discountPrice ?? nested.sellingPrice ?? nested.price ?? nested.location?.[0]?.discountPrice ?? 0;
+        return { ...item, id: item.cartItemId ?? item.id ?? item._id ?? backendId, backendId, updateField, isPackage, qty: Number(item.qty ?? item.quantity ?? 1), name: item.name ?? item.serviceName ?? item.packageName ?? nested.name ?? nested.serviceName ?? nested.packageName ?? nested.title ?? 'Service', duration: Number(item.duration ?? item.timeInMin ?? nested.duration ?? nested.timeInMin ?? 0), price: Number(rawPrice) || 0 };
+      }));
+    }).catch((error) => { if (active) setCartError(error.message); });
+    return () => { active = false; };
+  }, [authVersion]);
 
   const addItem = async (item) => {
+    if (!getUserToken()) {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem('authReturnPath', window.location.pathname);
+        window.history.pushState({}, '', '/login');
+        window.dispatchEvent(new Event('popstate'));
+      }
+      return false;
+    }
     if (!item?.id || pendingAdds.current.has(item.id)) return;
     const backendId = item.packageId ?? item.id;
     if (!/^[a-f\d]{24}$/i.test(String(backendId))) {
@@ -36,7 +72,12 @@ export function useCartViewModel() {
       return;
     }
     pendingAdds.current.add(item.id);
-    try { if (item.isPackage) await cartService.addPackage(backendId, 1); else await cartService.addService(backendId, 1); } catch (error) {
+    try {
+      if (item.isPackage) {
+        if (/custom|edit/i.test(String(item.packageType || ''))) await cartService.addCustomPackage(backendId, 1);
+        else await cartService.addPackage(backendId, 1);
+      } else await cartService.addService(backendId, 1);
+    } catch (error) {
       const message = error.message || 'Unable to add this item to cart.';
       setCartError(message);
       if (typeof window !== 'undefined' && typeof window.alert === 'function') window.alert(message);

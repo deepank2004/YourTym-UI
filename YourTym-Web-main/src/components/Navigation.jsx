@@ -46,7 +46,7 @@ export function Navbar({ go, totals, mobileOpen, setMobileOpen }) {
           <ShoppingCart size={20} />
           {totals.count > 0 && <span className="cart-badge">{totals.count}</span>}
         </button>
-        {getUserToken() ? <button onClick={() => { clearAuthentication(); go('/'); }} className="primary-button hidden sm:inline-flex">Logout</button> : <button onClick={() => go('/login')} className="primary-button hidden sm:inline-flex">Login / Signup</button>}
+        {getUserToken() ? <button onClick={() => { clearAuthentication(); window.dispatchEvent(new Event('auth-changed')); go('/'); }} className="primary-button hidden sm:inline-flex">Logout</button> : <button onClick={() => go('/login')} className="primary-button hidden sm:inline-flex">Login / Signup</button>}
         <button className="icon-button lg:hidden" onClick={() => setMobileOpen(!mobileOpen)}>
           {mobileOpen ? <X /> : <Menu />}
         </button>
@@ -66,7 +66,7 @@ export function Navbar({ go, totals, mobileOpen, setMobileOpen }) {
               {label}
             </button>
           ))}
-          {getUserToken() ? <button onClick={() => { clearAuthentication(); go('/'); }} className="primary-button mt-4 w-full justify-center">Logout</button> : <button onClick={() => go('/login')} className="primary-button mt-4 w-full justify-center">Login / Signup</button>}
+          {getUserToken() ? <button onClick={() => { clearAuthentication(); window.dispatchEvent(new Event('auth-changed')); go('/'); }} className="primary-button mt-4 w-full justify-center">Logout</button> : <button onClick={() => go('/login')} className="primary-button mt-4 w-full justify-center">Login / Signup</button>}
         </div>
       )}
     </header>

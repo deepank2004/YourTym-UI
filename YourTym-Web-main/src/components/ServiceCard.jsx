@@ -18,7 +18,12 @@ export function ServiceCard({ service, addItem, id }) {
   const description = plainText(service.description);
   return (
     <article className="service-card" id={id}>
-      {service.image ? <img src={service.image} alt={service.name} /> : <div className="image-placeholder" aria-label={`${service.name} image unavailable`} />}
+      <div className="service-card-media">
+        {service.image ? <img src={service.image} alt={service.name} /> : <div className="image-placeholder" aria-label={`${service.name} image unavailable`} />}
+        <button type="button" onClick={() => addItem(service)} className="add-button">
+          Add
+        </button>
+      </div>
       <div className="p-4">
         <div className="mb-2 flex items-start justify-between gap-3">
           <h3>{service.name}</h3>
@@ -37,9 +42,6 @@ export function ServiceCard({ service, addItem, id }) {
               <Clock size={14} /> {service.duration} min
             </p>
           </div>
-          <button onClick={() => addItem(service)} className="add-button">
-            Add
-          </button>
         </div>
       </div>
     </article>

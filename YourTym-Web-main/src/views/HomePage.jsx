@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, MapPin } from 'lucide-react';
+import { ArrowRight, Download, MapPin, Sparkles, Star, Users } from 'lucide-react';
 import { ServiceCard } from '../components/ServiceCard.jsx';
 import { PackageGrid } from '../components/CartComponents.jsx';
 import { OffersStrip, Reviews } from '../components/OffersReviews.jsx';
@@ -48,15 +48,53 @@ function categoryTitle(category) {
 }
 
 function mainCategoryIdOf(category) {
-  const value = category?.mainCategoryId
+  // `listMainCategories` returns main-category documents. Their own `_id`
+  // is the value required by PackagebyMaincategory; `mainCategoryId` can be
+  // a nested parent/reference field on wrapped catalogue records.
+  const value = category?._id
+    ?? category?.id
     ?? category?.mainCategory?._id
     ?? category?.mainCategory?.id
     ?? category?.mainCategoryId?._id
     ?? category?.mainCategoryId?.id
-    ?? category?._id
-    ?? category?.id;
+    ?? category?.mainCategoryId;
   return typeof value === 'object' ? (value?._id ?? value?.id) : value;
 }
+
+const achievements = [
+  { value: '7000+', label: 'Professionals', Icon: Users },
+  { value: '6M+', label: 'App Downloads', Icon: Download },
+  { value: '8M+', label: 'Bookings Completed', Icon: Sparkles },
+  { value: '50+', label: 'Cities in India', Icon: MapPin },
+  { value: '4.8', label: "India's Top Rated Beauty App", Icon: Star },
+];
+
+const serviceOfferings = [
+  {
+    title: 'Salon at Home',
+    description: 'From precision haircuts and styling to waxing, facials, clean-ups and mani-pedis, enjoy trusted salon care in the comfort and privacy of your home.',
+    image: images.womenSalon,
+    fallback: images.massage,
+    action: 'Explore salon services',
+    path: '/women-services',
+  },
+  {
+    title: 'Spa & Wellness at Home',
+    description: 'Slow down with relaxing massages, nourishing spa rituals and thoughtful wellness services designed to release stress, restore energy and help you feel your best.',
+    image: images.spaWomen,
+    fallback: images.massage,
+    action: 'Explore wellness',
+    path: '/women-services',
+  },
+  {
+    title: 'Skin & Facial Care',
+    description: 'Give your skin the care it deserves with personalised facials, clean-ups and glow treatments using professional techniques and products selected for your skin.',
+    image: images.facial,
+    fallback: images.cleanup,
+    action: 'Explore skincare',
+    path: '/women-services',
+  },
+];
 
 export function HomePage({ go, addItem }) {
   const [data, setData] = useState({
@@ -178,6 +216,54 @@ export function HomePage({ go, addItem }) {
         <SectionState state={{ ...data.services, items: services }}>
           <div className="service-grid">{services.slice(0, 4).map((service) => <ServiceCard key={service.id} service={service} addItem={addItem} />)}</div>
         </SectionState>
+      </section>
+
+      <section className="section home-section achievements-section" aria-labelledby="achievements-title">
+        <div className="achievements-panel">
+          <h2 id="achievements-title">Achievements so far</h2>
+          <div className="achievements-grid">
+            {achievements.map(({ value, label, Icon }) => (
+              <article className="achievement-item" key={label}>
+                <div className="achievement-icon" aria-hidden="true"><Icon size={34} strokeWidth={1.8} /></div>
+                <strong>{value}</strong>
+                <span>{label}</span>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="section home-section home-offerings-section" aria-labelledby="offerings-title">
+        <div className="home-offerings-heading">
+          <div>
+            <p className="eyebrow">YourTym at home</p>
+            <h2 id="offerings-title">Explore what we offer</h2>
+          </div>
+          <p>Personalised beauty and wellness, brought to you.</p>
+        </div>
+        <div className="home-offerings-grid">
+          {serviceOfferings.map((offering) => (
+            <article className="home-offering-card" key={offering.title}>
+              <button type="button" className="home-offering-media" style={{ '--offering-image': `url("${offering.image}")` }} onClick={() => go(offering.path)} aria-label={offering.title}>
+                <img
+                  src={offering.image}
+                  alt={offering.title}
+                  loading="lazy"
+                  onError={(event) => {
+                    if (offering.fallback && event.currentTarget.src !== offering.fallback) event.currentTarget.src = offering.fallback;
+                  }}
+                />
+              </button>
+              <div className="home-offering-copy">
+                <h3>{offering.title}</h3>
+                <p>{offering.description}</p>
+                <button type="button" className="home-offering-link" onClick={() => go(offering.path)}>
+                  {offering.action} <ArrowRight size={15} />
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="section home-section">

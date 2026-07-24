@@ -1,6 +1,7 @@
 import React from 'react';
 import { Minus, Plus, PackageCheck, Clock } from 'lucide-react';
 import { FormatService } from '../services/FormatService.js';
+import { groupPackageServices } from '../services/api/homeService.js';
 
 export function CartList({ cart, updateQty }) {
   return (
@@ -31,6 +32,10 @@ export function CartList({ cart, updateQty }) {
 }
 
 export function PackageGrid({ go, addItem, compact, packages }) {
+  const editPackage = (pkg) => {
+    try { sessionStorage.setItem('selectedPackageForEdit', JSON.stringify(pkg)); } catch { /* session storage is optional */ }
+    go('/edit-package');
+  };
   return (
     <div className="package-grid">
       {packages
@@ -43,21 +48,22 @@ export function PackageGrid({ go, addItem, compact, packages }) {
                 <PackageCheck size={14} /> PACKAGE
               </div>
               <h3>{pkg.name}</h3>
-              <p>{pkg.description}</p>
+              {pkg.includedServices?.length > 0 && <ul className="package-card-included-list">
+                {groupPackageServices(pkg.includedServices).slice(0, 4).map((service, index) => <li key={service.id || `${pkg.id}-service-${index}`}><b>{service.subCategory || service.category || 'Service'}:</b> {service.name}</li>)}
+              </ul>}
               <div className="my-4 flex items-center justify-between">
                 <span className="duration">
                   <Clock size={15} /> {pkg.duration} min
                 </span>
                 <span>
-                  <b>{FormatService.formatPrice(pkg.price)}</b>{' '}
-                  <s>{FormatService.formatPrice(pkg.original)}</s>
+                  <b>{pkg.hasPrice === false ? 'Price at checkout' : FormatService.formatPrice(pkg.price)}</b>{' '}
+                  {pkg.hasPrice !== false && <s>{FormatService.formatPrice(pkg.original)}</s>}
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button className="secondary-button small">View Details</button>
-                <button className="outline-button small" onClick={() => go('/edit-package')}>
-                  Edit Package
-                </button>
+                {pkg.isEditable && <button className="outline-button small" onClick={() => editPackage(pkg)}>
+                  Edit your package
+                </button>}
                 <button className="add-button" onClick={() => addItem(pkg)}>
                   Add to Cart
                 </button>

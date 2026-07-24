@@ -41,7 +41,8 @@ export const userEndpoints = Object.freeze({
     categoriesByMainCategory: (mainCategoryId) => adminPath(`/Category/allCategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}`),
     subCategoriesByCategory: (mainCategoryId, categoryId) => adminPath(`/SubCategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}/${requiredSegment(categoryId, 'categoryId')}`),
     servicesBySubCategory: (mainCategoryId, categoryId, subCategoryId) => adminPath(`/Service/${requiredSegment(mainCategoryId, 'mainCategoryId')}/${requiredSegment(categoryId, 'categoryId')}/${requiredSegment(subCategoryId, 'subCategoryId')}`),
-    packagesByMainCategory: (mainCategoryId) => adminPath(`/PackagebyMaincategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}`),
+    packagesByMainCategory: (mainCategoryId) => adminPath(`/PackagebyMaincategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}/`),
+    allPackages: adminPath('/Package/getAllService'),
     packagesByCategory: (mainCategoryId, categoryId) => adminPath(`/Packagebycategory/${requiredSegment(mainCategoryId, 'mainCategoryId')}/${requiredSegment(categoryId, 'categoryId')}`),
     search: userPath('/Category/search'),
     mostSearched: userPath('/most-searched'),
@@ -133,7 +134,9 @@ export const userEndpoints = Object.freeze({
     mainCategoryCounts: (mainCategoryId) => userPath(`/rating-mainCategoryRatings/${requiredSegment(mainCategoryId, 'mainCategoryId')}`),
   }),
   banners: Object.freeze({
-    static: userPath('/Banner/all/staticBanner'),
+    // The collection's public getStaticBanner request is the Admin route;
+    // the authenticated User variant returns 404 on the deployed API.
+    static: adminPath('/Banner/all/staticBanner'),
   }),
   slots: Object.freeze({
     list: userPath('/slot'),
