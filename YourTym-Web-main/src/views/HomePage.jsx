@@ -2,12 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { ArrowRight, Download, MapPin, Sparkles, Star, Users } from 'lucide-react';
 import { ServiceCard } from '../components/ServiceCard.jsx';
 import { PackageGrid } from '../components/CartComponents.jsx';
-import { OffersStrip, Reviews } from '../components/OffersReviews.jsx';
+import { OffersStrip } from '../components/OffersReviews.jsx';
 import { SectionTitle, EntryCard } from '../components/CommonComponents.jsx';
 import { homeService, mapService, mapPackage } from '../services/api/homeService.js';
 import { categoryService } from '../services/api/categoryService.js';
 import { images } from '../models/constants.js';
-import { userAdditionalService } from '../services/api/userAdditionalService.js';
 
 function SectionState({ state, children, empty = 'No data available.' }) {
   if (state.status === 'loading') return <p className="muted">Loading…</p>;
@@ -103,7 +102,6 @@ export function HomePage({ go, addItem }) {
     services: initial(),
     packages: initial(),
   });
-  const [testimonials, setTestimonials] = useState([]);
   const openMainCategoryPage = (category) => {
     const mainCategoryId = mainCategoryIdOf(category);
     if (mainCategoryId) {
@@ -130,17 +128,6 @@ export function HomePage({ go, addItem }) {
       }
     }));
 
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    userAdditionalService.testimonials()
-      .then((items) => {
-        const list = Array.isArray(items) ? items : (items?.testimonials ?? []);
-        if (active) setTestimonials(list);
-      })
-      .catch(() => {});
     return () => { active = false; };
   }, []);
 
@@ -275,7 +262,6 @@ export function HomePage({ go, addItem }) {
 
       <section className="section"><OffersStrip go={go} /></section>
       <section className="section entry-grid"><EntryCard title="For Women" image={images.womenSalon} go={() => go('/women-services')} /><EntryCard title="For Men" image={images.menSalon} go={() => go('/men-services')} /></section>
-      <Reviews reviews={testimonials.map((item, index) => ({ id: item?._id ?? item?.id ?? `testimonial-${index}`, author: item?.name ?? item?.user?.fullName ?? 'YourTym customer', text: item?.comment ?? item?.description ?? item?.review ?? '' }))} />
 
     </div>
   );
