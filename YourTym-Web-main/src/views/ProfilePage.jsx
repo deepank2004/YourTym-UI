@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { getProfile, updateProfile } from '../services/api/profileService.js';
-import { getUserToken } from '../services/api/tokenStorage.js';
+import { clearAuthentication, getUserToken } from '../services/api/tokenStorage.js';
 
 const EMPTY_PROFILE = {
   fullName: '',
@@ -122,6 +122,12 @@ export function ProfilePage({ go }) {
     }
   };
 
+  const handleLogout = () => {
+    clearAuthentication();
+    window.dispatchEvent(new Event('auth-changed'));
+    go('/');
+  };
+
   return (
     <div className="animate-in">
       <button className="back-button" onClick={() => go('/')}>
@@ -131,6 +137,12 @@ export function ProfilePage({ go }) {
         <div className="panel">
           <p className="eyebrow">YourTym account</p>
           <h1 className="section-title">Profile</h1>
+
+          <div className="my-6 flex flex-wrap gap-3" aria-label="Account options">
+            <button type="button" className="outline-button" onClick={() => go('/booking-history')}>Booking history</button>
+            <button type="button" className="outline-button" onClick={() => go('/address')}>My addresses</button>
+            <button type="button" className="secondary-button" onClick={handleLogout}>Logout</button>
+          </div>
 
           {feedback && (
             <p

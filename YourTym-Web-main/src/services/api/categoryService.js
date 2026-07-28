@@ -377,40 +377,35 @@ export async function listPackagesByCategory(mainCategoryId, categoryId) {
 
 export async function listPackagesByMainCategory(mainCategoryId) {
   const endpoint = userEndpoints.catalog.packagesByMainCategory(mainCategoryId);
-  if (!getUserToken()) {
-    // Browsing the catalogue must not require login. Prefer the exact
-    // category endpoint first (some deployments expose it publicly), then
-    // fall back to the public grouped catalogue response.
-    try {
-      const response = await apiClient.get(endpoint, { skipAuth: true, params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } });
-      const packages = packageCollection(response.data, endpoint);
-      if (packages.length) return packages.map((item, index) => mapPackage(item, index));
-    } catch {
-      // The deployed API may protect this Admin route; use the public route.
-    }
-    const response = await apiClient.get(userEndpoints.catalog.packages, { skipAuth: true, params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } });
-    return publicPackageCollection(response.data, mainCategoryId, userEndpoints.catalog.packages)
-      .map((item, index) => mapPackage(item, index));
-  }
+  const hasToken = Boolean(getUserToken());
+  const requestConfig = { ...(hasToken ? {} : { skipAuth: true }), params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } };
+
   try {
-    const response = await apiClient.get(endpoint);
-    return packageCollection(response.data, endpoint).map((item, index) => mapPackage(item, index));
-  } catch (error) {
-    // Some deployments return 404 for a valid category-specific package URL,
-    // while the authenticated all-packages route remains available. Use it as
-    // a data-preserving fallback before considering the public catalogue.
-    try {
-      const allResponse = await apiClient.get(userEndpoints.catalog.allPackages, { params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } });
-      const matching = packagesForMainCategory(allResponse.data, mainCategoryId, userEndpoints.catalog.allPackages);
-      if (matching.length) return matching.map((item, index) => mapPackage(item, index));
-    } catch {
-      // Fall through to the public User response below.
-    }
-    const response = await apiClient.get(userEndpoints.catalog.packages, { skipAuth: true, params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } });
-    const matching = publicPackageCollection(response.data, mainCategoryId, userEndpoints.catalog.packages);
+    // Prefer the exact main-category endpoint. It may be exposed publicly on
+    // one deployment and protected on another, so the public catalogue below
+    // remains a fallback.
+    const response = await apiClient.get(endpoint, requestConfig);
+    const packages = packageCollection(response.data, endpoint);
+    if (packages.length) return packages.map((item, index) => mapPackage(item, index));
+  } catch { /* Try the public catalogue fallbacks below. */ }
+
+  // Some deployments return 404/500 for the exact URL. Try the all-packages
+  // route with the same auth mode, then use the public User catalogue. The
+  // public response is authoritative for logged-out browsing.
+  try {
+    const allResponse = await apiClient.get(userEndpoints.catalog.allPackages, requestConfig);
+    const matching = packagesForMainCategory(allResponse.data, mainCategoryId, userEndpoints.catalog.allPackages);
     if (matching.length) return matching.map((item, index) => mapPackage(item, index));
-    throw error;
+  } catch {
+    // Continue to the public User catalogue response below.
   }
+
+  const response = await apiClient.get(userEndpoints.catalog.packages, requestConfig);
+  const matching = publicPackageCollection(response.data, mainCategoryId, userEndpoints.catalog.packages);
+  if (matching.length) return matching.map((item, index) => mapPackage(item, index));
+  // A protected admin endpoint may fail even though the public catalogue
+  // request succeeded. Do not surface that protected error in the catalogue.
+  return [];
 }
 
 export const categoryService = Object.freeze({ listServices, listCategories, listMainCategories, listCategoriesByMainCategory, listSubCategories, listServicesBySubCategory, listPackagesByCategory, listPackagesByMainCategory });
