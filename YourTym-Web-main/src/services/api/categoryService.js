@@ -371,14 +371,17 @@ function packagesForMainCategory(payload, mainCategoryId, endpoint) {
 
 export async function listPackagesByCategory(mainCategoryId, categoryId) {
   const endpoint = userEndpoints.catalog.packagesByCategory(mainCategoryId, categoryId);
-  const response = await apiClient.get(endpoint, { params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } });
+  const response = await apiClient.get(endpoint, { skipAuth: true, params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } });
   return packageCollection(response.data, endpoint).map((item, index) => mapPackage(item, index));
 }
 
 export async function listPackagesByMainCategory(mainCategoryId) {
   const endpoint = userEndpoints.catalog.packagesByMainCategory(mainCategoryId);
-  const hasToken = Boolean(getUserToken());
-  const requestConfig = { ...(hasToken ? {} : { skipAuth: true }), params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } };
+  // The backend package catalogue is public. Always skip Authorization here
+  // so browsing remains available before login and is not affected by a stale
+  // or expired token in localStorage. Cart and checkout requests remain auth
+  // protected in their own service methods.
+  const requestConfig = { skipAuth: true, params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } };
 
   try {
     // Prefer the exact main-category endpoint. It may be exposed publicly on
