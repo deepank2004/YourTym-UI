@@ -1,10 +1,10 @@
 import axios from 'axios';
-import { API_BASE_URL, API_TIMEOUT_MS } from './apiConfig.js';
+import { API_PROXY_BASE_URL, API_TIMEOUT_MS } from './apiConfig.js';
 import { normalizeApiError } from './apiError.js';
 import { getUserToken, clearAuthentication } from './tokenStorage.js';
 
 export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_PROXY_BASE_URL,
   timeout: API_TIMEOUT_MS,
   headers: {
     Accept: 'application/json',
