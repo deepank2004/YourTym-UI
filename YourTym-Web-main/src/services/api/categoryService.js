@@ -372,7 +372,7 @@ function packagesForMainCategory(payload, mainCategoryId, endpoint) {
 export async function listPackagesByCategory(mainCategoryId, categoryId) {
   const endpoint = userEndpoints.catalog.packagesByCategory(mainCategoryId, categoryId);
   const response = await apiClient.get(endpoint, {
-    ...(getUserToken() ? {} : { skipAuth: true }),
+    skipAuth: true,
     params: { _ts: Date.now() },
     headers: { 'Cache-Control': 'no-cache' },
   });
@@ -381,27 +381,38 @@ export async function listPackagesByCategory(mainCategoryId, categoryId) {
 
 export async function listPackagesByMainCategory(mainCategoryId) {
   const endpoint = userEndpoints.catalog.packagesByMainCategory(mainCategoryId);
-  // Prefer the stored user token when one exists because some production
-  // deployments still protect the package catalogue. When logged out, omit
-  // Authorization so public package browsing continues to work.
+  // Package browsing is public. Always omit Authorization here so a stale or
+  // expired login token cannot make the public catalogue return 401/403.
+  // Cart and checkout requests remain authenticated in their own services.
   const requestConfig = {
-    ...(getUserToken() ? {} : { skipAuth: true }),
+    skipAuth: true,
     params: { _ts: Date.now() },
     headers: { 'Cache-Control': 'no-cache' },
   };
 
+  // The User catalogue is the public contract for package browsing. It
+  // returns all packages (often grouped by category), so filter that response
+  // locally by the selected main-category id before falling back to the
+  // category-specific Admin route.
+  try {
+    const publicResponse = await apiClient.get(userEndpoints.catalog.packages, requestConfig);
+    const publicPackages = publicPackageCollection(publicResponse.data, mainCategoryId, userEndpoints.catalog.packages);
+    if (publicPackages.length) return publicPackages.map((item, index) => mapPackage(item, index));
+  } catch {
+    // Continue to the exact main-category endpoint below.
+  }
+
   try {
     // Prefer the exact main-category endpoint. It may be exposed publicly on
-    // one deployment and protected on another, so the public catalogue below
-    // remains a fallback.
+    // one deployment and protected on another, so the request remains a
+    // fallback for installations where the User catalogue is unavailable.
     const response = await apiClient.get(endpoint, requestConfig);
     const packages = packageCollection(response.data, endpoint);
     if (packages.length) return packages.map((item, index) => mapPackage(item, index));
   } catch { /* Try the public catalogue fallbacks below. */ }
 
   // Some deployments return 404/500 for the exact URL. Try the all-packages
-  // route with the same auth mode, then use the public User catalogue. The
-  // public response is authoritative for logged-out browsing.
+  // route with the same public auth mode as a final compatibility fallback.
   try {
     const allResponse = await apiClient.get(userEndpoints.catalog.allPackages, requestConfig);
     const matching = packagesForMainCategory(allResponse.data, mainCategoryId, userEndpoints.catalog.allPackages);
@@ -410,21 +421,6 @@ export async function listPackagesByMainCategory(mainCategoryId) {
     // Continue to the public User catalogue response below.
   }
 
-  let response;
-  try {
-    response = await apiClient.get(userEndpoints.catalog.packages, requestConfig);
-  } catch (error) {
-    // A valid user token is accepted by most deployments, but a few public
-    // catalogue deployments reject requests that include Authorization. Retry
-    // once without the token before reporting the catalogue as unavailable.
-    if (!getUserToken()) throw error;
-    response = await apiClient.get(userEndpoints.catalog.packages, {
-      ...requestConfig,
-      skipAuth: true,
-    });
-  }
-  const matching = publicPackageCollection(response.data, mainCategoryId, userEndpoints.catalog.packages);
-  if (matching.length) return matching.map((item, index) => mapPackage(item, index));
   // A protected admin endpoint may fail even though the public catalogue
   // request succeeded. Do not surface that protected error in the catalogue.
   return [];
