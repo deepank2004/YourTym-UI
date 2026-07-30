@@ -21,8 +21,12 @@ export const config = {
 
 function requestPath(req) {
   const value = req.query?.path;
-  const segments = Array.isArray(value) ? value : value ? [value] : [];
-  return `/${segments.map((segment) => encodeURIComponent(String(segment))).join('/')}`;
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  // Vercel may expose a catch-all route as either an array of segments or a
+  // single slash-delimited string. Split both forms before encoding so
+  // `/api/v1/user/getProfile` is not forwarded as `/%2Fapi%2Fv1%2F...`.
+  const segments = values.flatMap((segment) => String(segment).split('/')).filter(Boolean);
+  return `/${segments.map((segment) => encodeURIComponent(decodeURIComponent(segment))).join('/')}`;
 }
 
 function readBody(req) {
