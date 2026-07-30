@@ -371,17 +371,24 @@ function packagesForMainCategory(payload, mainCategoryId, endpoint) {
 
 export async function listPackagesByCategory(mainCategoryId, categoryId) {
   const endpoint = userEndpoints.catalog.packagesByCategory(mainCategoryId, categoryId);
-  const response = await apiClient.get(endpoint, { skipAuth: true, params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } });
+  const response = await apiClient.get(endpoint, {
+    ...(getUserToken() ? {} : { skipAuth: true }),
+    params: { _ts: Date.now() },
+    headers: { 'Cache-Control': 'no-cache' },
+  });
   return packageCollection(response.data, endpoint).map((item, index) => mapPackage(item, index));
 }
 
 export async function listPackagesByMainCategory(mainCategoryId) {
   const endpoint = userEndpoints.catalog.packagesByMainCategory(mainCategoryId);
-  // The backend package catalogue is public. Always skip Authorization here
-  // so browsing remains available before login and is not affected by a stale
-  // or expired token in localStorage. Cart and checkout requests remain auth
-  // protected in their own service methods.
-  const requestConfig = { skipAuth: true, params: { _ts: Date.now() }, headers: { 'Cache-Control': 'no-cache' } };
+  // Prefer the stored user token when one exists because some production
+  // deployments still protect the package catalogue. When logged out, omit
+  // Authorization so public package browsing continues to work.
+  const requestConfig = {
+    ...(getUserToken() ? {} : { skipAuth: true }),
+    params: { _ts: Date.now() },
+    headers: { 'Cache-Control': 'no-cache' },
+  };
 
   try {
     // Prefer the exact main-category endpoint. It may be exposed publicly on
@@ -403,7 +410,19 @@ export async function listPackagesByMainCategory(mainCategoryId) {
     // Continue to the public User catalogue response below.
   }
 
-  const response = await apiClient.get(userEndpoints.catalog.packages, requestConfig);
+  let response;
+  try {
+    response = await apiClient.get(userEndpoints.catalog.packages, requestConfig);
+  } catch (error) {
+    // A valid user token is accepted by most deployments, but a few public
+    // catalogue deployments reject requests that include Authorization. Retry
+    // once without the token before reporting the catalogue as unavailable.
+    if (!getUserToken()) throw error;
+    response = await apiClient.get(userEndpoints.catalog.packages, {
+      ...requestConfig,
+      skipAuth: true,
+    });
+  }
   const matching = publicPackageCollection(response.data, mainCategoryId, userEndpoints.catalog.packages);
   if (matching.length) return matching.map((item, index) => mapPackage(item, index));
   // A protected admin endpoint may fail even though the public catalogue
