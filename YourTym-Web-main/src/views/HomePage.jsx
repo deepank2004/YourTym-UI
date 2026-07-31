@@ -139,25 +139,41 @@ export function HomePage({ go, addItem }) {
     .map((item) => item?.category ?? item)
     .filter((item) => item && (item._id || item.id || item.name));
   const collageImages = [
-    bannerImage || images.hero,
     images.womenSalon,
     images.massage,
   ];
 
   return (
     <div className="animate-in home-page">
-      <section className="section home-showcase">
-        <div className="home-intro">
-          <div className="home-intro-copy">
+      <section
+        className="home-hero"
+        style={{ '--home-hero-image': `url("${bannerImage || images.hero}")` }}
+        aria-labelledby="home-hero-title"
+      >
+        <div className="home-hero-backdrop" aria-hidden="true" />
+        <div className="home-hero-inner">
+          <div className="home-hero-copy">
             <p className="eyebrow"><MapPin size={14} /> YourTym at home</p>
-            <h1>Home services at your <span>doorstep</span></h1>
-            <p className="home-intro-text">Book curated salon, skin, massage and grooming services delivered by trained professionals.</p>
+            <h1 id="home-hero-title">Home services at your <span>doorstep</span></h1>
+            <p className="home-hero-text">Book curated salon, skin, massage and grooming services delivered by trained professionals.</p>
             <div className="home-actions">
               <button className="primary-button" onClick={() => go('/women-services')}>Book Women Services <ArrowRight size={16} /></button>
-              <button className="secondary-button" onClick={() => go('/men-services')}>Explore Men Services</button>
+              <button className="home-hero-secondary" onClick={() => go('/men-services')}>Explore Men Services</button>
             </div>
           </div>
+          <div className="home-hero-trust" aria-label="YourTym benefits">
+            <span><strong>7000+</strong> trained professionals</span>
+            <span><strong>At-home</strong> care, on your schedule</span>
+            <span><strong>4.8</strong> rated beauty services</span>
+          </div>
+        </div>
+        <button className="home-hero-scroll" type="button" onClick={() => document.getElementById('home-categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} aria-label="Scroll to explore categories">
+          <span>Explore categories</span><ArrowRight size={16} />
+        </button>
+      </section>
 
+      <section className="section home-showcase" id="home-categories">
+        <div className="home-intro">
           <div className="home-categories-card">
             <div className="home-card-heading">
               <div>
@@ -183,16 +199,12 @@ export function HomePage({ go, addItem }) {
         </div>
 
         <div className="home-collage" aria-label="YourTym service highlights">
-          <button className="home-collage-tile home-collage-main" onClick={() => go('/women-services')}>
-            <img src={collageImages[0]} alt="YourTym services" />
-            <span className="home-collage-overlay"><small>Premium care at home</small><strong>Feel your best, every day</strong></span>
-          </button>
           <button className="home-collage-tile" onClick={() => go('/women-services')}>
-            <img src={collageImages[1]} alt="Women services" />
+            <img src={collageImages[0]} alt="Women services" />
             <span className="home-collage-label">Women services</span>
           </button>
           <button className="home-collage-tile" onClick={() => go('/men-services')}>
-            <img src={collageImages[2]} alt="Massage services" />
+            <img src={collageImages[1]} alt="Massage services" />
             <span className="home-collage-label">Massage & wellness</span>
           </button>
         </div>
