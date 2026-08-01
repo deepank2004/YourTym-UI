@@ -381,48 +381,88 @@ export async function listPackagesByCategory(mainCategoryId, categoryId) {
 
 export async function listPackagesByMainCategory(mainCategoryId) {
   const endpoint = userEndpoints.catalog.packagesByMainCategory(mainCategoryId);
-  // Package browsing is public. Always omit Authorization here so a stale or
-  // expired login token cannot make the public catalogue return 401/403.
-  // Cart and checkout requests remain authenticated in their own services.
-  const requestConfig = {
-    skipAuth: true,
-    params: { _ts: Date.now() },
+  // The collection documents the category-specific Admin route with a bearer
+  // token, while newer deployments also expose the User catalogue publicly.
+  // Use the token when it is available and omit it for logged-out browsing.
+  // Do not append a cache-busting query here: matching the Postman URL exactly
+  // avoids strict-route/proxy differences in production.
+  const hasToken = Boolean(getUserToken());
+  const authenticatedConfig = {
+    ...(hasToken ? {} : { skipAuth: true }),
     headers: { 'Cache-Control': 'no-cache' },
   };
+  const publicConfig = {
+    skipAuth: true,
+    headers: { 'Cache-Control': 'no-cache' },
+  };
+  let lastError;
+  let successfulRequest = false;
 
-  // The User catalogue is the public contract for package browsing. It
-  // returns all packages (often grouped by category), so filter that response
-  // locally by the selected main-category id before falling back to the
-  // category-specific Admin route.
-  try {
-    const publicResponse = await apiClient.get(userEndpoints.catalog.packages, requestConfig);
-    const publicPackages = publicPackageCollection(publicResponse.data, mainCategoryId, userEndpoints.catalog.packages);
-    if (publicPackages.length) return publicPackages.map((item, index) => mapPackage(item, index));
-  } catch {
-    // Continue to the exact main-category endpoint below.
+  const tryPackages = async (path, config, parse) => {
+    try {
+      const response = await apiClient.get(path, config);
+      successfulRequest = true;
+      const packages = parse(response.data, path);
+      return packages.length ? packages.map((item, index) => mapPackage(item, index)) : null;
+    } catch (error) {
+      lastError = error;
+      return null;
+    }
+  };
+
+  // First use the exact endpoint requested by the page. This preserves the
+  // authenticated behavior documented in Postman and also works publicly on
+  // deployments where the backend has enabled anonymous catalogue access.
+  const exactPackages = await tryPackages(endpoint, authenticatedConfig, packageCollection);
+  if (exactPackages) return exactPackages;
+
+  // If a stale token is rejected by a public-only deployment, retry the exact
+  // endpoint without Authorization before using broad catalogue endpoints.
+  if (hasToken) {
+    const publicExactPackages = await tryPackages(endpoint, publicConfig, packageCollection);
+    if (publicExactPackages) return publicExactPackages;
   }
 
-  try {
-    // Prefer the exact main-category endpoint. It may be exposed publicly on
-    // one deployment and protected on another, so the request remains a
-    // fallback for installations where the User catalogue is unavailable.
-    const response = await apiClient.get(endpoint, requestConfig);
-    const packages = packageCollection(response.data, endpoint);
-    if (packages.length) return packages.map((item, index) => mapPackage(item, index));
-  } catch { /* Try the public catalogue fallbacks below. */ }
+  // The User catalogue is grouped by category on the current API. Filter the
+  // response locally so the selected main category receives only its packages.
+  const cataloguePackages = await tryPackages(
+    userEndpoints.catalog.packages,
+    authenticatedConfig,
+    (payload, path) => publicPackageCollection(payload, mainCategoryId, path),
+  );
+  if (cataloguePackages) return cataloguePackages;
 
-  // Some deployments return 404/500 for the exact URL. Try the all-packages
-  // route with the same public auth mode as a final compatibility fallback.
-  try {
-    const allResponse = await apiClient.get(userEndpoints.catalog.allPackages, requestConfig);
-    const matching = packagesForMainCategory(allResponse.data, mainCategoryId, userEndpoints.catalog.allPackages);
-    if (matching.length) return matching.map((item, index) => mapPackage(item, index));
-  } catch {
-    // Continue to the public User catalogue response below.
+  if (hasToken) {
+    const publicCataloguePackages = await tryPackages(
+      userEndpoints.catalog.packages,
+      publicConfig,
+      (payload, path) => publicPackageCollection(payload, mainCategoryId, path),
+    );
+    if (publicCataloguePackages) return publicCataloguePackages;
   }
 
-  // A protected admin endpoint may fail even though the public catalogue
-  // request succeeded. Do not surface that protected error in the catalogue.
+  // Last compatibility fallback for deployments that expose only the
+  // all-packages route.
+  const allPackages = await tryPackages(
+    userEndpoints.catalog.allPackages,
+    authenticatedConfig,
+    (payload, path) => packagesForMainCategory(payload, mainCategoryId, path),
+  );
+  if (allPackages) return allPackages;
+
+  if (hasToken) {
+    const publicAllPackages = await tryPackages(
+      userEndpoints.catalog.allPackages,
+      publicConfig,
+      (payload, path) => packagesForMainCategory(payload, mainCategoryId, path),
+    );
+    if (publicAllPackages) return publicAllPackages;
+  }
+
+  // A failed request is different from a successful empty catalogue. Surface
+  // the backend error so production diagnostics do not hide a 401/403/404 as
+  // “No packages available”.
+  if (lastError && !successfulRequest) throw lastError;
   return [];
 }
 
