@@ -45,6 +45,10 @@ function publishSelectedLocation(address) {
     .slice(0, 3)
     .join(', ') || 'Selected location';
   localStorage.setItem('locationLabel', label);
+  if (address.id) localStorage.setItem('selectedAddressId', String(address.id));
+  if (address.houseType === 'home' || address.houseType === 'Other') {
+    localStorage.setItem('selectedAddressHouseType', address.houseType);
+  }
   window.dispatchEvent(new CustomEvent('location-updated', { detail: { label } }));
 }
 
